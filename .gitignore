@@ -1,0 +1,33 @@
+# Build artifacts
+*.elf
+*.bin
+*.hex
+*.map
+*.srec
+
+# Object files
+*.o
+*.d
+*.a
+*.gcda
+*.gcno
+*.gcov
+
+# Core dumps
+core
+
+# Backup or temp files
+*.orig
+*.swp
+*.swo
+*.bak
+*.tmp
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Build directories
+build/
+dist/
+out/
