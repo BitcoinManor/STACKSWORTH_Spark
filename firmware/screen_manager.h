@@ -1,16 +1,15 @@
-// --- screen_manager.h ---
-//BLOKDBIT_Spark v0.002
 
-#ifndef SCREEN_MANAGER_H
-#define SCREEN_MANAGER_H
+// BLOKDBIT_Spark screen_manager.h
+// SPARKv0.03
 
-void initMainScreen();
-void initMetricsScreen();
-void initLifeScreen();
-void initBitcoin101Screen();
-void initSettingsScreen();
 
+#pragma once
+#include <lvgl.h>
+
+
+// External labels that other screens update
 extern lv_obj_t* priceValueLabel;
 extern lv_obj_t* blockValueLabel;
 
-#endif
+void screen_manager_init();
+void load_screen(int index);
