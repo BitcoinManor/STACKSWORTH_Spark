@@ -68,3 +68,7 @@ That’s the **Bitcoin way**: open, sovereign, and unstoppable.
 
 ### 🧡 Built by Bitcoiners, for Bitcoiners.  
 Together, we're making sound money visible.
+
+
+### Ace Notes
+XXXXXXXXXX
