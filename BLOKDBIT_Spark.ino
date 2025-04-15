@@ -21,7 +21,13 @@
  #include <Waveshare_ST7262_LVGL.h>
  #include <lvgl.h>
  #include "metrics_screen.h"
- #include "screen_b.h"
+ #include "bigstats_screen.h"
+ #include "world_screen.h"
+ #include "bitaxe_screen.h"
+ #include "settings_screen.h"
+ #include "screen_manager.h"
+
+
  
 
 // Define shared global variables
@@ -30,10 +36,13 @@
 //String lastBlockHeight = "Loading...";
 //String lastMiner = "Loading...";
  
- // Button pointers
- //lv_obj_t* leftBtn;
- //lv_obj_t* rightBtn;
- lv_obj_t* backBtn;
+ 
+ // Button pointers and toggle flags
+//lv_obj_t* backBtn;
+//lv_obj_t* rightBtn;
+//bool isLeftOn = false;
+//bool isRightOn = false;
+
  
  // Styles
  String title = "BLOKDBIT Spark – Satscape v0.0.2";
@@ -45,6 +54,9 @@
  lv_style_t blueStyle, yellowStyle;
  
  
+
+
+ 
  struct MinerTag {
    const char* tag;
    const char* name;
@@ -55,8 +67,9 @@
    { "antpool", "AntPool" },
    { "viabtc", "ViaBTC" },
    { "poolin", "Poolin" },
-   { "btc.com", "BTC.com" },
+   { "btccom", "BTC.com" },
    { "binance", "Binance Pool" },
+   { "carbon", "Carbon Negative" },
    { "slush", "Slush Pool" },
    { "braiins", "Braiins Pool" },
    { "foundry", "Foundry USA" },
@@ -64,6 +77,7 @@
    { "mara", "Marathon" },
    { "marathon", "Marathon" },
    { "luxor", "Luxor" },
+   { "ultimus", "ULTIMUSPOOL" },
    { "novablock", "NovaBlock" },
    { "sigma", "SigmaPool" },
    { "spider", "SpiderPool" },
@@ -71,8 +85,9 @@
    { "okex", "OKEx Pool" },
    { "kucoin", "KuCoin Pool" },
    { "sbi", "SBI Crypto" },
-   { "btc.top", "BTC.TOP" },
+   { "btctop", "BTC.TOP" },
    { "emcd", "EMCD Pool" },
+   { "secpool", "SECPOOL" },
    { "hz", "HZ Pool" },
    { "solo.ckpool", "Solo CKPool" },
    { "solopool", "Solo Pool" },
@@ -144,10 +159,18 @@
           float price = doc["bitcoin"]["usd"];
           char priceFormatted[16];
           sprintf(priceFormatted, "$%.2f", price);
-          lastPrice = priceFormatted; // Store last price to be displayed so no blank space is present
-          lv_label_set_text(priceValueLabel, priceFormatted); // Update price label
+
+          // Update label + cache
+          lastPrice = priceFormatted;
+          lv_label_set_text(priceValueLabel, priceFormatted);
           Serial.print("💰 Bitcoin Price: ");
           Serial.println(priceFormatted);
+
+          // ➕ Push to chart
+          if (priceChart && priceSeries) {
+            lv_chart_set_next_value(priceChart, priceSeries, (int)price);
+          }
+
       } else {
           Serial.println("❌ Failed to fetch Bitcoin price.");
       }
@@ -275,12 +298,49 @@
       Serial.println("❌ WiFi not connected!");
   }
 }
+
+
+
+//Bitcoin Chart
+void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
+  HTTPClient http;
+  http.begin("https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=1");
+  int httpCode = http.GET();
+
+  if (httpCode == 200) {
+    String payload = http.getString();
+    DynamicJsonDocument doc(16384);
+    DeserializationError error = deserializeJson(doc, payload);
+
+    if (error) {
+      Serial.print("❌ JSON Parse Error: ");
+      Serial.println(error.c_str());
+    } else {
+      JsonArray prices = doc["prices"];
+
+      if (prices.size() >= 24) {
+        for (int i = 0; i < 24; i++) {
+          float price = prices[i][1]; // [timestamp, price]
+          lv_chart_set_value_by_id(chart, series, i, static_cast<int>(price));
+        }
+        Serial.println("📈 Chart updated with 24 hourly BTC prices.");
+      } else {
+        Serial.println("⚠️ Not enough price entries returned!");
+      }
+    }
+  } else {
+    Serial.printf("❌ Failed to fetch chart data: %d\n", httpCode);
+  }
+
+  http.end();
+}
+
   
  
   
  // NEW: Toggle flags
  //bool isLeftOn = false;  
- bool isRightOn = false;
+ //bool isRightOn = false;
  
  
  
@@ -299,10 +359,12 @@
    Serial.println("\nWi-Fi connected!");
  
    Serial.println("Display initialized.");
-   
-   lvgl_port_lock(-1);
+
+    lvgl_port_lock(-1);
+
+    
  
-   // Init styles
+   // ***STYLES***
    lv_style_init(&orangeStyle);
    lv_style_set_bg_color(&orangeStyle, lv_color_hex(0xFFA500));
    lv_style_set_radius(&orangeStyle, 10);
@@ -358,12 +420,10 @@
    Serial.println("Enhanced UI complete.");
    delay(500);           // ✅ Give LVGL time to build UI
    fetchBitcoinData();
- }
-   //my old loop
+   fetchBitcoinChartData(priceSeries, priceChart);  // Initial chart data
    
- //void loop() {
-   //delay(5);
-   //lv_timer_handler();
+ }
+   
    
    void loop() {
    static unsigned long lastUpdate = 0;
