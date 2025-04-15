@@ -12,8 +12,13 @@ extern lv_obj_t* priceValueLabel;
 extern lv_obj_t* blockValueLabel;
 extern lv_obj_t* feeValueLabel;
 extern lv_obj_t* solvedByValueLabel;
-extern lv_obj_t* leftBtn;
+extern lv_obj_t* backBtn;
 extern lv_obj_t* rightBtn;
+
+
+extern lv_obj_t* priceChart;
+extern lv_chart_series_t* priceSeries;
+
 
 
 // Shared event handler
