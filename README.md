@@ -70,5 +70,3 @@ That’s the **Bitcoin way**: open, sovereign, and unstoppable.
 Together, we're making sound money visible.
 
 
-### Ace Notes
-XXXXXXXXXX
