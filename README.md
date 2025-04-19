@@ -54,7 +54,7 @@ This firmware is:
 
 Soon you'll be able to flash your BLOKDBIT Spark firmware with no setup required using our browser-based tool:
 
-👉 **[BLOKDBIT Web Flasher](https://bitcoinmanor.github.io/BlokdBit-Matrix/)**  
+👉 **[BLOKDBIT Web Flasher](https://bitcoinmanor.github.io/BLOKDBIT_WebFlasher/)**  
 *(This will be updated to include Spark firmware)*
 
 ---
