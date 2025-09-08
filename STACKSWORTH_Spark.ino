@@ -1,7 +1,7 @@
 /***************************************************************************************
- *  BLOKDBIT Spark – "mainScreen" UI
+ *  STACKSWORTH Spark – "mainScreen" UI
  *  --------------------------------------------------
- *  Project     : BLOKDBIT Spark Firmware
+ *  Project     : STACKSWORTH Spark Firmware
  *  Version     : v0.0.2
  *  Device      : ESP32-S3 Waveshare 7" Touchscreen (800x480)
  *  Description : Modular Bitcoin Dashboard UI using LVGL
@@ -26,9 +26,29 @@
  #include "bitaxe_screen.h"
  #include "settings_screen.h"
  #include "screen_manager.h"
+ #include "ui_theme.h"
+ #include <float.h>
 
+ // ---- pretty price formatting: $12,345.67 ----
+static String fmt_with_commas(unsigned long v) {
+  String s = String(v);
+  int insert = s.length() - 3;
+  while (insert > 0) {
+    s = s.substring(0, insert) + "," + s.substring(insert);
+    insert -= 3;
+  }
+  return s;
+}
 
- 
+static void format_price_usd(float value, char* out, size_t outlen, const char* prefix="$") {
+  if (value < 0) value = 0;
+  unsigned long whole = (unsigned long)value;
+  int cents = (int)((value - (float)whole) * 100.0f + 0.5f);
+  if (cents >= 100) { whole++; cents -= 100; }
+  String s = String(prefix) + fmt_with_commas(whole) + "." + (cents < 10 ? "0" : "") + String(cents);
+  s.toCharArray(out, outlen);
+}
+
 
 // Define shared global variables
 //String lastPrice = "Loading...";
@@ -45,7 +65,7 @@
 
  
  // Styles
- String title = "BLOKDBIT Spark – Satscape v0.0.2";
+ String title = "STACKSWORTH Spark – Satscape v0.0.2";
  lv_style_t widgetStyle;
  lv_style_t widget2Style;
  lv_style_t glowStyle;
@@ -132,9 +152,10 @@
  
  
  // Wi-Fi Credentials
- const char* ssid = "[ in-juh-noo-i-tee ]";
- const char* password = "notachance";
- 
+ const char* ssid = "SM-S918W0853";
+ const char* password = "MySamsungPhone!!!";
+ //const char* ssid = "[ in-juh-noo-i-tee ]";
+ //const char* password = "notachance";
  
  //int lastBlockHeight = 0;
 
@@ -149,34 +170,68 @@
   if (WiFi.status() == WL_CONNECTED) {
       HTTPClient http;
 
-      // Step 1: Fetch Bitcoin Price
-      http.begin("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd");
-      int httpCode = http.GET();
-      if (httpCode == 200) {
-          String payload = http.getString();
-          DynamicJsonDocument doc(512);
-          deserializeJson(doc, payload);
-          float price = doc["bitcoin"]["usd"];
-          char priceFormatted[16];
-          sprintf(priceFormatted, "$%.2f", price);
+      // Step 1: Fetch Bitcoin Price (USD + CAD)
+http.begin("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,cad&include_24hr_change=true");
+int httpCode = http.GET();
+if (httpCode == 200) {
+    String payload = http.getString();
+    DynamicJsonDocument doc(512);
+    deserializeJson(doc, payload);
 
-          // Update label + cache
-          lastPrice = priceFormatted;
-          lv_label_set_text(priceValueLabel, priceFormatted);
-          Serial.print("💰 Bitcoin Price: ");
-          Serial.println(priceFormatted);
+    float usd = doc["bitcoin"]["usd"] | 0.0f;
+    float cad = doc["bitcoin"]["cad"] | 0.0f;
 
-          // ➕ Push to chart
-          if (priceChart && priceSeries) {
-            lv_chart_set_next_value(priceChart, priceSeries, (int)price);
-          }
+    // USD price
+    char usdBuf[32];
+    format_price_usd(usd, usdBuf, sizeof(usdBuf));  // → "$69,420.13"
+    lastPrice = usdBuf;
+    if (priceValueLabel) lv_label_set_text(priceValueLabel, usdBuf);
 
-      } else {
-          Serial.println("❌ Failed to fetch Bitcoin price.");
-      }
-      http.end();
+    Serial.print("💰 Bitcoin Price (USD): "); Serial.println(usdBuf);
+
+    // SATS / $1 USD
+    if (satsUsdLabel && usd > 0.0f) {
+      int sats_usd = (int)(100000000.0f / usd);
+      lv_label_set_text_fmt(satsUsdLabel, "%d SATS / $1 USD", sats_usd);
+    }
+
+    // CAD price (small line, Row 3)
+    if (priceCadLabel) {
+      char cadBuf[40];
+      char cadCore[32];
+      format_price_usd(cad, cadCore, sizeof(cadCore)); // gives "$69,420.13"
+      snprintf(cadBuf, sizeof(cadBuf), "CAD %s", cadCore);
+      lv_label_set_text(priceCadLabel, cadBuf);
+
+      Serial.print("💵 Bitcoin Price (CAD): "); Serial.println(cadBuf);
+    }
+
+    // SATS / $1 CAD
+    if (satsCadLabel && cad > 0.0f) {
+      int sats_cad = (int)(100000000.0f / cad);
+      lv_label_set_text_fmt(satsCadLabel, "%d SATS / $1 CAD", sats_cad);
+    }
+
+    float changePct = doc["bitcoin"]["usd_24h_change"] | 0.0f;
+    Serial.printf("[price] 24h change (usd): %+.2f%%\n", changePct);
+    ui_update_change_pill(changePct);
+
+
+    // Push to chart (USD for now)
+    if (priceChart && priceSeries) {
+      lv_chart_set_next_value(priceChart, priceSeries, (int)usd);
+      lv_chart_refresh(priceChart);
+    }
+
+} else {
+    Serial.printf("❌ Failed to fetch Bitcoin price. HTTP=%d\n", httpCode);
+}
+http.end();
+
+
 
       // Step 2: Fetch Block Height
+     
       http.begin("https://mempool.space/api/blocks/tip/height");
       httpCode = http.GET();
       if (httpCode == 200) {
@@ -192,6 +247,7 @@
       http.end();
 
       // Step 3: Fetch Fee Estimates
+      
       http.begin("https://mempool.space/api/v1/fees/recommended");
       httpCode = http.GET();
       if (httpCode == 200) {
@@ -213,6 +269,7 @@
       // Step 4: Fetch Miner Information
       // Get the block hash
       String blockHash = "";
+     
       http.begin("https://mempool.space/api/blocks/tip/hash");
       httpCode = http.GET();
       if (httpCode == 200) {
@@ -303,37 +360,75 @@
 
 //Bitcoin Chart
 void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
+  Serial.println(F("[chart] Fetching 24h prices…"));
   HTTPClient http;
   http.begin("https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=1");
   int httpCode = http.GET();
+  Serial.printf("[chart] HTTP: %d\n", httpCode);
 
-  if (httpCode == 200) {
-    String payload = http.getString();
-    DynamicJsonDocument doc(16384);
-    DeserializationError error = deserializeJson(doc, payload);
-
-    if (error) {
-      Serial.print("❌ JSON Parse Error: ");
-      Serial.println(error.c_str());
-    } else {
-      JsonArray prices = doc["prices"];
-
-      if (prices.size() >= 24) {
-        for (int i = 0; i < 24; i++) {
-          float price = prices[i][1]; // [timestamp, price]
-          lv_chart_set_value_by_id(chart, series, i, static_cast<int>(price));
-        }
-        Serial.println("📈 Chart updated with 24 hourly BTC prices.");
-      } else {
-        Serial.println("⚠️ Not enough price entries returned!");
-      }
-    }
-  } else {
-    Serial.printf("❌ Failed to fetch chart data: %d\n", httpCode);
+  if (httpCode != 200) {
+    http.end();
+    return;
   }
 
+  String payload = http.getString();
   http.end();
+
+  DynamicJsonDocument doc(16384);
+  DeserializationError err = deserializeJson(doc, payload);
+  if (err) {
+    Serial.print("[chart] JSON error: ");
+    Serial.println(err.c_str());
+    return;
+  }
+
+  JsonArray prices = doc["prices"];
+  size_t n = prices.size();
+  Serial.printf("[chart] points available: %u\n", (unsigned)n);
+  if (n < 2) return;
+
+  const int targetPts = 24;   // show ~24 hourly points
+  float first = 0, last = 0;
+  float minv = FLT_MAX, maxv = -FLT_MAX;
+
+  // 1) Sample ~24 points evenly across the window, compute min/max
+  for (int i = 0; i < targetPts; i++) {
+    size_t idx = (size_t)((float)i * (n - 1) / (targetPts - 1));
+    float p = prices[idx][1]; // [timestamp, price]
+    if (i == 0) first = p;
+    if (i == targetPts - 1) last = p;
+    if (p < minv) minv = p;
+    if (p > maxv) maxv = p;
+
+    if (chart && series) {
+      // Footer chart gets the actual price values
+      lv_chart_set_value_by_id(chart, series, i, (lv_coord_t)p);
+    }
+  }
+
+  // 2) Footer chart: apply a little padding so the line isn't touching edges
+  if (chart) {
+    float pad = (maxv - minv) * 0.05f;
+    if (pad < 1) pad = 1; // guard tiny windows
+    lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y,
+                       (lv_coord_t)(minv - pad),
+                       (lv_coord_t)(maxv + pad));
+    lv_chart_refresh(chart);
+  }
+
+  // 3) Mini sparkline: normalize to 0..100 and push into priceSeriesMini
+  if (priceChartMini && priceSeriesMini) {
+    for (int i = 0; i < targetPts; i++) {
+      size_t idx = (size_t)((float)i * (n - 1) / (targetPts - 1));
+      float p = prices[idx][1];
+      float y = (maxv > minv) ? ( (p - minv) * 100.0f / (maxv - minv) ) : 50.0f;
+      lv_chart_set_value_by_id(priceChartMini, priceSeriesMini, i, (lv_coord_t)y);
+    }
+    lv_chart_refresh(priceChartMini);
+  }
 }
+
+
 
   
  
@@ -361,7 +456,7 @@ void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
    Serial.println("Display initialized.");
 
     lvgl_port_lock(-1);
-
+    ui::init_ui_theme();         // ← initialize theme once
     
  
    // ***STYLES***
@@ -436,5 +531,5 @@ void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
  }
  
  // --------------------------------------------------
- // 🚀 BLOKDBIT Spark – Engine Activated
+ // 🚀 STACKSWORTH Spark – Engine Activated
  // Built with love, glow effects, and 🍊 coin self-sovereignty
