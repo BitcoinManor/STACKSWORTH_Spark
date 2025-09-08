@@ -1,5 +1,5 @@
-// BLOKDBIT_Spark metrics_screen.h
-// SPARKv0.03
+// STACKSWORTH_metrics_screen.h
+// SPARKv0.02
 
 
 #pragma once
@@ -9,11 +9,20 @@
 // Shared state and controls
 extern bool isLeftOn;
 extern lv_obj_t* priceValueLabel;
+extern lv_obj_t* priceSatsLabel;
 extern lv_obj_t* blockValueLabel;
 extern lv_obj_t* feeValueLabel;
 extern lv_obj_t* solvedByValueLabel;
 extern lv_obj_t* backBtn;
 extern lv_obj_t* rightBtn;
+// New globals for the Price card
+extern lv_obj_t* satsUsdLabel;
+extern lv_obj_t* satsCadLabel;
+
+extern lv_obj_t* changePillLabel;     // 24h change badge
+extern lv_obj_t* priceChartMini;      // mini sparkline
+extern lv_chart_series_t* priceSeriesMini;
+
 
 
 extern lv_obj_t* priceChart;
@@ -33,4 +42,6 @@ extern lv_style_t greenStyle;
 extern lv_style_t blueStyle;
 
 lv_obj_t* create_metrics_screen();
-//void initMetricsScreen();
+
+// Updates the 24h change pill text + style (green/red)
+void ui_update_change_pill(float changePct);
