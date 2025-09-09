@@ -2,7 +2,7 @@
 
 Welcome to the official firmware repository for **STACKSWORTH Spark** — a beautifully designed, touchscreen-powered Bitcoin dashboard built on the **ESP32-S3**.
 
-Crafted by [Bitcoin Manor](https://github.com/BitcoinManor), this project combines performance, usability, and sleek UI design to deliver a plug-and-play Bitcoin experience for every home or workspace.
+Crafted by [Bitcoin Manor](https://BitcoinManor.com), this project combines performance, usability, and sleek UI design to deliver a plug-and-play Bitcoin experience for every home or workspace.
 
 ---
 
