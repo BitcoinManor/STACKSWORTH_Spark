@@ -45,6 +45,16 @@ void ui_update_fee_badges_lmh(int low, int med, int high) {
   if (feeHighLabel) lv_label_set_text_fmt(feeHighLabel, "HIGH %d", high);
 }
 
+// --- Millionth block hint ---
+lv_obj_t* blocksToMillionLabel = nullptr;
+
+void ui_update_blocks_to_million(long height) {
+  long remaining = 1000000L - height;
+  if (remaining < 0) remaining = 0;
+  if (blocksToMillionLabel) {
+    lv_label_set_text_fmt(blocksToMillionLabel, "%ld BLOCKS to the Millionth Block", remaining);
+  }
+}
 
 
 
@@ -317,6 +327,13 @@ lv_obj_add_style(solvedByValueLabel, &ui::st_accent_secondary, 0);
 lv_label_set_text(solvedByValueLabel, lastMiner.c_str());  // just the miner name
 lv_obj_set_style_text_font(solvedByValueLabel, &lv_font_montserrat_14, 0);
 
+// Small, centered hint under the block card
+blocksToMillionLabel = lv_label_create(widget2);           
+lv_obj_set_width(blocksToMillionLabel, LV_PCT(100));
+lv_obj_set_style_text_align(blocksToMillionLabel, LV_TEXT_ALIGN_CENTER, 0);
+lv_obj_set_style_text_color(blocksToMillionLabel, lv_color_hex(0x9AA0A6), 0); // subtle grey
+lv_obj_set_style_text_font(blocksToMillionLabel, &lv_font_montserrat_12, 0);
+lv_label_set_text(blocksToMillionLabel, "—");  // placeholder until first update
 
 
 
