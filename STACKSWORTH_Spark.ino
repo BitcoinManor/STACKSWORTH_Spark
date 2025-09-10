@@ -2,7 +2,7 @@
  *  STACKSWORTH Spark – "mainScreen" UI
  *  --------------------------------------------------
  *  Project     : STACKSWORTH Spark Firmware
- *  Version     : v0.0.2
+ *  Version     : v0.0.3
  *  Device      : ESP32-S3 Waveshare 7" Touchscreen (800x480)
  *  Description : Modular Bitcoin Dashboard UI using LVGL
  *  Designer    : Bitcoin Manor 🟧
@@ -37,6 +37,7 @@
 #include "esp_system.h"
 #include "esp_wifi.h"   // for esp_read_mac
 
+void ui_update_blocks_to_million(long height);
 
 void ui_update_fee_badges_lmh(int low, int med, int high);
 
@@ -459,20 +460,25 @@ http.end();
 
 
       // Step 2: Fetch Block Height
-     
-      http.begin("https://mempool.space/api/blocks/tip/height");
-      httpCode = http.GET();
-      if (httpCode == 200) {
-          String blockHeightStr = http.getString();
-          lastBlockHeight = blockHeightStr;
-          lv_label_set_text(blockValueLabel, lastBlockHeight.c_str());
-          lastBlockHeight = blockHeightStr; // Store last block height to be displayed so no blank space is present
-          Serial.print("📏 Block Height: ");
-          Serial.println(blockHeightStr);
-      } else {
-          Serial.println("❌ Failed to fetch block height.");
-      }
-      http.end();
+http.begin("https://mempool.space/api/blocks/tip/height");
+httpCode = http.GET();
+if (httpCode == 200) {
+    String blockHeightStr = http.getString();
+
+    // Update the big label as before
+    lastBlockHeight = blockHeightStr;
+    if (blockValueLabel) lv_label_set_text(blockValueLabel, lastBlockHeight.c_str());
+
+    // NEW: update the “BLOCKS to the Millionth Block” hint
+    long h = blockHeightStr.toInt();     // mempool returns a plain number string
+    if (h > 0) ui_update_blocks_to_million(h);
+
+    Serial.printf("📏 Block Height: %ld\n", h);
+} else {
+    Serial.println("❌ Failed to fetch block height.");
+}
+http.end();
+
 
      // Step 3: Fetch Fee Estimates
       http.begin("https://mempool.space/api/v1/fees/recommended");
