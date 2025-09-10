@@ -33,6 +33,17 @@ lv_chart_series_t* priceSeries = nullptr;
 lv_obj_t* priceChart = nullptr;
 
 
+// --- Fee tier badges (LOW / MED / HIGH) ---
+lv_obj_t* feeLowLabel  = nullptr;
+lv_obj_t* feeMedLabel  = nullptr;
+lv_obj_t* feeHighLabel = nullptr;
+
+// Public helper so the .ino can update all three at once
+void ui_update_fee_badges_lmh(int low, int med, int high) {
+  if (feeLowLabel)  lv_label_set_text_fmt(feeLowLabel,  "LOW %d",  low);
+  if (feeMedLabel)  lv_label_set_text_fmt(feeMedLabel,  "MED %d",  med);
+  if (feeHighLabel) lv_label_set_text_fmt(feeHighLabel, "HIGH %d", high);
+}
 
 
 
@@ -93,11 +104,11 @@ lv_obj_t* create_metrics_screen() {
 
   // BLOKDBIT SPARK Labels
 
-  lv_obj_t* blokdbitLabel = lv_label_create(scr);
-  lv_label_set_text(blokdbitLabel, "STACKSWORTH");
-  lv_obj_set_style_text_color(blokdbitLabel, lv_color_hex(0xFCA420), 0);
-  lv_obj_set_style_text_font(blokdbitLabel, &lv_font_montserrat_20, 0);
-  lv_obj_align(blokdbitLabel, LV_ALIGN_TOP_LEFT, 25, 10);
+  lv_obj_t* stacksworthLabel = lv_label_create(scr);
+  lv_label_set_text(stacksworthLabel, "STACKSWORTH");
+  lv_obj_set_style_text_color(stacksworthLabel, lv_color_hex(0xFCA420), 0);
+  lv_obj_set_style_text_font(stacksworthLabel, &lv_font_montserrat_20, 0);
+  lv_obj_align(stacksworthLabel, LV_ALIGN_TOP_LEFT, 25, 10);
 
   lv_obj_t* sparkLabel = lv_label_create(scr);
   lv_label_set_text(sparkLabel, "// SPARK");
@@ -247,111 +258,7 @@ lv_chart_refresh(priceChartMini);
 
 
   
-/*
 
-  // Block Height Widget
-  lv_obj_t* widget2 = lv_obj_create(scr);
-  lv_obj_set_size(widget2, 240, 190);
-  lv_obj_align(widget2, LV_ALIGN_TOP_MID, 0, 40);
-  lv_obj_add_style(widget2, &widget2Style, 0);
-  lv_obj_add_style(widget2, &glowStyle, 0);
-
-  lv_obj_t* blockLabel = lv_label_create(widget2);
-  lv_label_set_text(blockLabel, "BLOCK HEIGHT");
-  lv_obj_set_style_text_color(blockLabel, lv_color_hex(0xFCA420), 0);
-  lv_obj_set_style_text_font(blockLabel, &lv_font_unscii_16, 0);
-  lv_obj_align(blockLabel, LV_ALIGN_TOP_RIGHT, 0, 0);
-
-  blockValueLabel = lv_label_create(widget2);
-  lv_label_set_text(blockValueLabel, lastBlockHeight.c_str()); // Update block height label
-  lv_obj_set_style_text_color(blockValueLabel, lv_color_hex(0xFFFFFF), 0);
-  lv_obj_set_style_text_font(blockValueLabel, &lv_font_montserrat_26, 0);
-  lv_obj_align(blockValueLabel, LV_ALIGN_TOP_RIGHT, 0, 20);
-
-
-
-
-  //SOLVED BY Widget
-  lv_obj_t* solvedByLabel = lv_label_create(widget2);
-  lv_label_set_text(solvedByLabel, "Mined By");
-  lv_obj_set_style_text_color(solvedByLabel, lv_color_hex(0xFCA420), 0);
-  lv_obj_set_style_text_font(solvedByLabel, &lv_font_unscii_16, 0);
-  lv_obj_align(solvedByLabel, LV_ALIGN_TOP_RIGHT, 0, 55);
-
-  solvedByValueLabel = lv_label_create(widget2);
-  lv_label_set_text(solvedByValueLabel, lastMiner.c_str()); // Update miner label
-  lv_obj_set_style_text_color(solvedByValueLabel, lv_color_hex(0xFFFFFF), 0);
-  lv_obj_set_style_text_font(solvedByValueLabel, &lv_font_montserrat_26, 0);
-  lv_obj_align(solvedByValueLabel, LV_ALIGN_TOP_RIGHT, 0, 75);
-
-*/
-
-
-      
-
-/*
-// ───────────────────────── Block Card1(themed) ─────────────────────────
-lv_obj_t* widget2 = ui::make_card(scr);
-lv_obj_set_size(widget2, 240, 190);
-lv_obj_align(widget2, LV_ALIGN_TOP_MID, 0, 40);
-
-// Vertical stack inside the card
-lv_obj_set_flex_flow(widget2, LV_FLEX_FLOW_COLUMN);
-lv_obj_set_style_pad_all(widget2, 12, 0);
-lv_obj_set_style_pad_row(widget2, 8, 0);
-
-// Row 1: Title (left) + age pill (right)
-lv_obj_t* blkRow1 = lv_obj_create(widget2);
-lv_obj_remove_style_all(blkRow1);
-lv_obj_set_size(blkRow1, LV_PCT(100), LV_SIZE_CONTENT);
-lv_obj_set_flex_flow(blkRow1, LV_FLEX_FLOW_ROW);
-lv_obj_set_flex_align(blkRow1, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-lv_obj_set_style_bg_opa(blkRow1, LV_OPA_TRANSP, 0);
-
-lv_obj_t* blkTitle = lv_label_create(blkRow1);
-lv_obj_add_style(blkTitle, &ui::st_title, 0);
-lv_obj_set_style_text_font(blkTitle, &lv_font_montserrat_14, 0);
-lv_label_set_text(blkTitle, "Latest Block");
-
-// Neutral pill style (once)
-static bool blkPillInit = false;
-static lv_style_t st_pill_neutral;
-if (!blkPillInit) {
-  blkPillInit = true;
-  lv_style_init(&st_pill_neutral);
-  lv_style_set_radius(&st_pill_neutral, 999);
-  lv_style_set_bg_color(&st_pill_neutral, lv_color_hex(0x243142));  // subtle slate
-  lv_style_set_bg_opa(&st_pill_neutral, LV_OPA_COVER);
-  lv_style_set_pad_hor(&st_pill_neutral, 8);
-  lv_style_set_pad_ver(&st_pill_neutral, 2);
-  lv_style_set_text_color(&st_pill_neutral, lv_color_hex(0xCBD5E1));
-  lv_style_set_text_font(&st_pill_neutral, &lv_font_montserrat_14);
-}
-
-lv_obj_t* blockAgePill = lv_label_create(blkRow1);
-lv_obj_add_style(blockAgePill, &st_pill_neutral, 0);
-lv_label_set_text(blockAgePill, "age —");  // wired next step
-
-// Big value
-blockValueLabel = lv_label_create(widget2);
-lv_obj_add_style(blockValueLabel, &ui::st_value, 0);
-lv_obj_set_style_text_font(blockValueLabel, &lv_font_montserrat_26, 0);
-lv_label_set_text(blockValueLabel, lastBlockHeight.c_str());
-
-// “Mined by …” row
-lv_obj_t* blkRow3 = lv_obj_create(widget2);
-lv_obj_remove_style_all(blkRow3);
-lv_obj_set_size(blkRow3, LV_PCT(100), LV_SIZE_CONTENT);
-lv_obj_set_style_bg_opa(blkRow3, LV_OPA_TRANSP, 0);
-
-lv_obj_t* minedBy = lv_label_create(blkRow3);
-lv_label_set_text(minedBy, "Mined by ");
-
-solvedByValueLabel = lv_label_create(blkRow3);
-lv_obj_add_style(solvedByValueLabel, &ui::st_accent_secondary, 0);
-lv_label_set_text(solvedByValueLabel, lastMiner.c_str());
-
-*/
 
 // ───────────────────────── Block Height (themed structure only) ─────────────────────────
 lv_obj_t* widget2 = ui::make_card(scr);                // themed card container (same as Price/Fees)
@@ -439,15 +346,55 @@ lv_obj_set_style_text_font(solvedByValueLabel, &lv_font_montserrat_14, 0);
   lv_obj_set_style_pad_column(feeRow, 8, 0);
   lv_obj_set_style_bg_opa(feeRow, LV_OPA_TRANSP, 0);
 
-  lv_obj_t* feeLabel = lv_label_create(feeRow);
-  lv_obj_add_style(feeLabel, &ui::st_title, 0);
-  lv_label_set_text(feeLabel, "sat/vB");
-  lv_obj_set_style_text_font(feeLabel, &lv_font_montserrat_20, 0); // ↑ label size
+  //lv_obj_t* feeLabel = lv_label_create(feeRow);
+  //lv_obj_add_style(feeLabel, &ui::st_title, 0);
+  //lv_label_set_text(feeLabel, "sat/vB");
+  //lv_obj_set_style_text_font(feeLabel, &lv_font_montserrat_20, 0); // ↑ label size
        
   feeValueLabel = lv_label_create(feeRow);
   lv_obj_add_style(feeValueLabel, &ui::st_value, 0);
   lv_label_set_text(feeValueLabel, lastFee.c_str());
   lv_obj_set_style_text_font(feeValueLabel, &lv_font_montserrat_26, 0); // ↑ value size
+
+// Row: fee tier badges (LOW / MED / HIGH)
+lv_obj_t* feeTiersRow = lv_obj_create(widget3);         // widget3 = your mempool card container
+lv_obj_remove_style_all(feeTiersRow);
+lv_obj_set_size(feeTiersRow, LV_PCT(100), LV_SIZE_CONTENT);
+lv_obj_set_flex_flow(feeTiersRow, LV_FLEX_FLOW_ROW);
+lv_obj_set_style_pad_gap(feeTiersRow, 8, 0);
+lv_obj_set_style_bg_opa(feeTiersRow, LV_OPA_TRANSP, 0);
+
+// --- LOW (green) ---
+feeLowLabel = lv_label_create(feeTiersRow);
+lv_obj_set_style_radius(feeLowLabel, 999, 0);
+lv_obj_set_style_pad_hor(feeLowLabel, 10, 0);
+lv_obj_set_style_pad_ver(feeLowLabel, 4, 0);
+lv_obj_set_style_bg_opa(feeLowLabel, LV_OPA_COVER, 0);
+lv_obj_set_style_bg_color(feeLowLabel, lv_color_hex(0x22C55E), 0);  // green
+lv_obj_set_style_text_color(feeLowLabel, lv_color_hex(0xFFFFFF), 0);
+lv_label_set_text(feeLowLabel, "LOW --");
+
+// --- MED (yellow) ---
+feeMedLabel = lv_label_create(feeTiersRow);
+lv_obj_set_style_radius(feeMedLabel, 999, 0);
+lv_obj_set_style_pad_hor(feeMedLabel, 10, 0);
+lv_obj_set_style_pad_ver(feeMedLabel, 4, 0);
+lv_obj_set_style_bg_opa(feeMedLabel, LV_OPA_COVER, 0);
+lv_obj_set_style_bg_color(feeMedLabel, lv_color_hex(0xF59E0B), 0);  // yellow
+lv_obj_set_style_text_color(feeMedLabel, lv_color_hex(0x111111), 0); // dark text reads better on yellow
+lv_label_set_text(feeMedLabel, "MED --");
+
+// --- HIGH (red) ---
+feeHighLabel = lv_label_create(feeTiersRow);
+lv_obj_set_style_radius(feeHighLabel, 999, 0);
+lv_obj_set_style_pad_hor(feeHighLabel, 10, 0);
+lv_obj_set_style_pad_ver(feeHighLabel, 4, 0);
+lv_obj_set_style_bg_opa(feeHighLabel, LV_OPA_COVER, 0);
+lv_obj_set_style_bg_color(feeHighLabel, lv_color_hex(0xEF4444), 0); // red
+lv_obj_set_style_text_color(feeHighLabel, lv_color_hex(0xFFFFFF), 0);
+lv_label_set_text(feeHighLabel, "HIGH --");
+
+  
 
 
 
