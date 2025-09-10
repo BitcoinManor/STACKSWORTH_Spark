@@ -2,32 +2,234 @@
  *  STACKSWORTH Spark – "mainScreen" UI
  *  --------------------------------------------------
  *  Project     : STACKSWORTH Spark Firmware
- *  Version     : v0.0.2
+ *  Version     : v0.0.3
+ *  Date        : 2025-09-09
  *  Device      : ESP32-S3 Waveshare 7" Touchscreen (800x480)
  *  Description : Modular Bitcoin Dashboard UI using LVGL
  *  Designer    : Bitcoin Manor 🟧
  * 
- *  
+ *   Summary:
+    Adds captive-portal Wi-Fi onboarding for Spark using SoftAP + SPIFFS page,
+    stores creds in Preferences, and shows a simple on-device setup screen.
+
+  Changes:
+    - SoftAP SSID: STACKSWORTH-SPARK-<MAC suffix>
+    - Serves /STACKS_Wifi_Portal.html(.gz) from SPIFFS
+    - /save supports both application/x-www-form-urlencoded and JSON
+    - /reboot endpoint for clean restart after saving
+    - Captive DNS redirect and /ping health probe
+    - Boot flow: try saved Wi-Fi → else start portal; LVGL pre-screen in portal mode
+    - loop(): pumps DNS while portal is active
+
+  Requirements:
+    - Partition scheme with SPIFFS enabled
+    - Upload /data with STACKS_Wifi_Portal.html.gz before flashing code
+ *  © STACKSWORTH
  *  💡 Easter Egg: Try tapping the infinity label in v0.1 😉
  ***************************************************************************************/
+#define FW_VERSION "v0.0.3"
+
+
+
+#include <Arduino.h>
+#include <WiFi.h>
+#include <ESPAsyncWebServer.h>
+#include <AsyncTCP.h>
+#include <DNSServer.h>
+#include <FS.h>
+#include <SPIFFS.h>
+#include <Preferences.h>
+#include <ArduinoJson.h>
+#include <HTTPClient.h>
+#include <Waveshare_ST7262_LVGL.h>
+#include <lvgl.h>
+#include "metrics_screen.h"
+#include "bigstats_screen.h"
+#include "world_screen.h"
+#include "bitaxe_screen.h"
+#include "settings_screen.h"
+#include "screen_manager.h"
+#include "ui_theme.h"
+#include <float.h>
+#include "esp_system.h"
+#include "esp_wifi.h"   // for esp_read_mac
+
+// ==== Captive portal globals & helpers ====
+AsyncWebServer server(80);
+DNSServer dns;
+Preferences prefs;
+
+IPAddress apIP(192,168,4,1);
+bool portalModeActive = false;
+bool lv_ready = false;        // set true after lcd_init/LVGL init
+String g_apName;              // <-- needed by startPortal + LVGL pre-screen
+
+
+static const char* AP_PREFIX = "STACKSWORTH-SPARK";  // Spark build; Matrix uses ...-MATRIX
+
+static const char* PORTAL_FILE = "/STACKS_Wifi_Portal.html";
+
+
+String makeAPName() {
+  uint8_t mac[6] = {0};
+
+  // We already call WiFi.mode(WIFI_AP) before this, so AP MAC is available.
+  esp_err_t err = esp_wifi_get_mac(WIFI_IF_AP, mac);
+  if (err != ESP_OK) {
+    // Fallback: try station MAC if AP MAC wasn't ready yet
+    esp_wifi_get_mac(WIFI_IF_STA, mac);
+  }
+
+  char suffix[7];
+  snprintf(suffix, sizeof(suffix), "%02X%02X%02X", mac[3], mac[4], mac[5]);
+  return String(AP_PREFIX) + "-" + suffix;  // e.g., STACKSWORTH-SPARK-9C1A2B
+}
+
+
+// Try connecting from saved preferences
+bool connectWiFiFromPrefs(uint32_t timeoutMs=15000) {
+  prefs.begin("sw", true);
+  String ssid = prefs.getString("ssid", "");
+  String pass = prefs.getString("pass", "");
+  prefs.end();
+
+  if (ssid.isEmpty()) return false;
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid.c_str(), pass.c_str());
+  Serial.printf("🌐 Connecting to %s", ssid.c_str());
+  uint32_t start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < timeoutMs) {
+    delay(250); Serial.print(".");
+  }
+  Serial.println();
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("✅ WiFi OK: %s\n", WiFi.localIP().toString().c_str());
+    return true;
+  }
+  Serial.println("❌ WiFi failed");
+  return false;
+}
+
+// Start AP + portal and routes
+void startPortal() {
+  portalModeActive = true;
+  Serial.println("🚪 Starting Spark captive portal…");
+
+  if (!SPIFFS.begin(true)) {
+    Serial.println("⚠️ SPIFFS mount failed (formatting?)");
+  }
+
+  WiFi.mode(WIFI_AP);
+  String apName = makeAPName();
+  WiFi.softAP(apName.c_str());
+  WiFi.softAPConfig(apIP, apIP, IPAddress(255,255,255,0));
+IPAddress ip = WiFi.softAPIP();
+Serial.printf("📡 AP SSID: %s  IP: %s\n", apName.c_str(), ip.toString().c_str());
+Serial.printf("SPIFFS has %s.gz: %d  and %s: %d\n",
+              PORTAL_FILE, SPIFFS.exists(String(PORTAL_FILE + String(".gz")).c_str()),
+              PORTAL_FILE, SPIFFS.exists(PORTAL_FILE));
+
+
+// Quick sanity: do we actually have the portal file?
+Serial.printf("SPIFFS exists /index.html.gz: %d  /index.html: %d\n",
+              SPIFFS.exists("/index.html.gz"), SPIFFS.exists("/index.html"));
+
+  delay(200);
+
+  dns.start(53, "*", apIP);  // simple captive-portal DNS
+
+  // -------- Serve the portal file (handles .gz correctly) --------
+server.on("/", HTTP_GET, [](AsyncWebServerRequest* r){
+  String gz = String(PORTAL_FILE) + ".gz";  // "/STACKS_Wifi_Portal.html.gz"
+  if (SPIFFS.exists(gz)) {
+    AsyncWebServerResponse* resp = r->beginResponse(SPIFFS, gz, "text/html");
+    resp->addHeader("Content-Encoding", "gzip");
+    r->send(resp);
+  } else if (SPIFFS.exists(PORTAL_FILE)) {
+    r->send(SPIFFS, PORTAL_FILE, "text/html");
+  } else {
+    r->send(404, "text/plain", "Portal file missing");
+  }
+});
+
+// Friendly aliases (optional)
+server.on("/index.html", HTTP_GET, [](AsyncWebServerRequest* r){ r->redirect("/"); });
+server.on("/portal",     HTTP_GET, [](AsyncWebServerRequest* r){ r->redirect("/"); });
+
+// Captive convenience: redirect any stray path to root
+server.onNotFound([](AsyncWebServerRequest* r){ r->redirect("/"); });
+
+// Probe endpoint to verify the server is up
+server.on("/ping", HTTP_GET, [](AsyncWebServerRequest* r){ r->send(200, "text/plain", "pong"); });
+
+
+  // urlencoded form support (existing Matrix portal posts will hit this)
+  server.on("/save", HTTP_POST, [](AsyncWebServerRequest *req){
+    if (req->hasParam("ssid", true)) {
+      prefs.begin("sw", false);
+      prefs.putString("ssid", req->arg("ssid"));
+      prefs.putString("pass", req->arg("password"));
+      prefs.putString("city", req->arg("city"));
+      prefs.putString("tz",   req->arg("timezone"));
+      prefs.putString("device", req->arg("device"));
+      prefs.end();
+      Serial.println("💾 Saved portal fields (urlencoded).");
+    }
+    req->send(200, "text/plain", "OK");
+  });
+
+  // JSON body support
+server.onRequestBody([](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t, size_t){
+  if (req->url() != "/save") return;
+
+  StaticJsonDocument<512> doc;
+  DeserializationError err = deserializeJson(doc, data, len);
+  if (err) {
+    Serial.printf("JSON parse error: %s\n", err.c_str());
+    return;
+  }
+
+  // ✅ No casts; let ArduinoJson apply defaults
+  String ssid   = doc["ssid"]     | "";
+  String pass   = doc["password"] | "";
+  String city   = doc["city"]     | "";
+  String tz     = doc["timezone"] | "";
+  String device = doc["device"]   | "";
+
+  if (ssid.length()) {
+    prefs.begin("sw", false);
+    prefs.putString("ssid", ssid);
+    prefs.putString("pass", pass);
+    prefs.putString("city", city);
+    prefs.putString("tz",   tz);
+    prefs.putString("device", device);
+    prefs.end();
+    Serial.println("💾 Saved portal fields (JSON).");
+  }
+});
+
+  server.on("/reboot", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(200, "text/plain", "Rebooting…");
+    delay(250);
+    ESP.restart();
+  });
+
+  server.begin();
+
+// 👉 Show on-screen instructions
+  //showPortalScreen(apName);
+g_apName = apName;  // remember until LVGL ready
+
+
+
+  Serial.printf("📶 AP: %s — connect and open http://192.168.4.1\n", apName.c_str());
+}
 
 
 
 
- #include <Arduino.h>
- #include <ArduinoJson.h>
- #include <WiFi.h>
- #include <HTTPClient.h>
- #include <Waveshare_ST7262_LVGL.h>
- #include <lvgl.h>
- #include "metrics_screen.h"
- #include "bigstats_screen.h"
- #include "world_screen.h"
- #include "bitaxe_screen.h"
- #include "settings_screen.h"
- #include "screen_manager.h"
- #include "ui_theme.h"
- #include <float.h>
+
 
  // ---- pretty price formatting: $12,345.67 ----
 static String fmt_with_commas(unsigned long v) {
@@ -74,6 +276,13 @@ static void format_price_usd(float value, char* out, size_t outlen, const char* 
  lv_style_t blueStyle, yellowStyle;
  
  
+// ===== LVGL portal screen bits =====
+lv_obj_t* portalScreen = nullptr;
+lv_obj_t* portalNetLabel = nullptr;
+lv_obj_t* portalUrlLabel = nullptr;
+
+
+
 
 
  
@@ -150,20 +359,73 @@ static void format_price_usd(float value, char* out, size_t outlen, const char* 
  }
  
  
- 
+ /*
  // Wi-Fi Credentials
  const char* ssid = "SM-S918W0853";
  const char* password = "MySamsungPhone!!!";
  //const char* ssid = "[ in-juh-noo-i-tee ]";
  //const char* password = "notachance";
+ */
+
  
  //int lastBlockHeight = 0;
+
+
+ 
 
  // 🌐 Cached values for display labels (prevent flicker / uploading state)
  String lastPrice = "…";            // Show loading dots initially
  String lastFee = "…";
  String lastBlockHeight = "…";
  String lastMiner = "…";
+
+
+
+void showPortalScreen(const String& apName) {
+  if (!lv_ready) return;
+  if (portalScreen) { lv_scr_load(portalScreen); return; }
+
+  portalScreen = lv_obj_create(NULL);
+  lv_obj_set_style_bg_color(portalScreen, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(portalScreen, LV_OPA_COVER, 0);
+
+  // Title
+  lv_obj_t* title = lv_label_create(portalScreen);
+  lv_label_set_text(title, "Connect to configure Wi-Fi");
+  lv_obj_set_style_text_color(title, lv_color_white(), 0);
+  lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 22);
+
+  // Spinner (nice “working” hint)
+  lv_obj_t* spin = lv_spinner_create(portalScreen, 1000, 90);
+  lv_obj_set_size(spin, 48, 48);
+  lv_obj_align(spin, LV_ALIGN_TOP_MID, 0, 64);
+
+  // AP name
+  portalNetLabel = lv_label_create(portalScreen);
+  lv_label_set_text_fmt(portalNetLabel, "Network: %s", apName.c_str());
+  lv_obj_set_style_text_color(portalNetLabel, lv_color_white(), 0);
+  lv_obj_set_style_text_align(portalNetLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(portalNetLabel, LV_ALIGN_CENTER, 0, -6);
+
+  // URL (AP IP is 192.168.4.1 by default)
+  portalUrlLabel = lv_label_create(portalScreen);
+  lv_label_set_text(portalUrlLabel, "If portal doesn’t auto-open:\nhttp://192.168.4.1");
+  lv_obj_set_style_text_color(portalUrlLabel, lv_color_white(), 0);
+  lv_obj_set_style_text_align(portalUrlLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(portalUrlLabel, LV_ALIGN_CENTER, 0, 28);
+
+  // Small hint at bottom
+  lv_obj_t* hint = lv_label_create(portalScreen);
+  lv_label_set_text(hint, "Open Wi-Fi settings → join the network above.");
+  lv_obj_set_style_text_color(hint, lv_color_white(), 0);
+  lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -18);
+
+  lv_scr_load(portalScreen);
+}
+
+
 
  
  void fetchBitcoinData() {
@@ -440,87 +702,97 @@ void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
  
  
  void setup() {
-   Serial.begin(115200);
-   Serial.println("🚀 Touch Test: Dual Button Toggle Mode");
- 
-   lcd_init();
- 
-   Serial.println("Connecting to Wi-Fi...");
-   WiFi.begin(ssid, password);
-   while (WiFi.status() != WL_CONNECTED) {
-     delay(500);
-     Serial.print(".");
-   }
-   Serial.println("\nWi-Fi connected!");
- 
-   Serial.println("Display initialized.");
+  Serial.begin(115200);
+  Serial.println("🚀 Spark Boot");
 
+  // 1) Mount FS once (portal will serve from SPIFFS)
+  SPIFFS.begin(true);
+
+  // 2) Decide connection path *before* any LVGL drawing
+  bool wlan_ok = connectWiFiFromPrefs();
+  if (!wlan_ok) {
+    startPortal();  // sets portalModeActive = true and fills g_apName
+  }
+
+  // 3) Initialize display + LVGL
+  lcd_init();
+  lv_ready = true;
+
+  // 4) UI based on mode: portal vs normal
+  if (portalModeActive) {
+    // Show the on-device instructions screen
+    showPortalScreen(g_apName);
+    // (Do NOT load metrics screen here; keep device in setup mode)
+  } else {
+    Serial.println("🌐 Wi-Fi connected via saved preferences.");
+
+    // Your existing UI init path
     lvgl_port_lock(-1);
     ui::init_ui_theme();         // ← initialize theme once
-    
- 
-   // ***STYLES***
-   lv_style_init(&orangeStyle);
-   lv_style_set_bg_color(&orangeStyle, lv_color_hex(0xFFA500));
-   lv_style_set_radius(&orangeStyle, 10);
-   lv_style_set_bg_opa(&orangeStyle, LV_OPA_COVER);
- 
-   lv_style_init(&greenStyle);
-   lv_style_set_bg_color(&greenStyle, lv_color_hex(0x00FF00));
-   lv_style_set_radius(&greenStyle, 10);
-   lv_style_set_bg_opa(&greenStyle, LV_OPA_COVER);
- 
-   lv_style_init(&blueStyle);
-   lv_style_set_bg_color(&blueStyle, lv_color_hex(0x007BFF));
-   lv_style_set_radius(&blueStyle, 10);
-   lv_style_set_bg_opa(&blueStyle, LV_OPA_COVER);
- 
-   lv_style_init(&yellowStyle);
-   lv_style_set_bg_color(&yellowStyle, lv_color_hex(0xFFFF00));
-   lv_style_set_radius(&yellowStyle, 10);
-   lv_style_set_bg_opa(&yellowStyle, LV_OPA_COVER);
- 
+
+    // *** STYLES ***
+    lv_style_init(&orangeStyle);
+    lv_style_set_bg_color(&orangeStyle, lv_color_hex(0xFFA500));
+    lv_style_set_radius(&orangeStyle, 10);
+    lv_style_set_bg_opa(&orangeStyle, LV_OPA_COVER);
+
+    lv_style_init(&greenStyle);
+    lv_style_set_bg_color(&greenStyle, lv_color_hex(0x00FF00));
+    lv_style_set_radius(&greenStyle, 10);
+    lv_style_set_bg_opa(&greenStyle, LV_OPA_COVER);
+
+    lv_style_init(&blueStyle);
+    lv_style_set_bg_color(&blueStyle, lv_color_hex(0x007BFF));
+    lv_style_set_radius(&blueStyle, 10);
+    lv_style_set_bg_opa(&blueStyle, LV_OPA_COVER);
+
+    lv_style_init(&yellowStyle);
+    lv_style_set_bg_color(&yellowStyle, lv_color_hex(0xFFFF00));
+    lv_style_set_radius(&yellowStyle, 10);
+    lv_style_set_bg_opa(&yellowStyle, LV_OPA_COVER);
+
     // ✨ Widget style
-   lv_style_init(&widgetStyle);
-   lv_style_set_radius(&widgetStyle, 16);
-   lv_style_set_bg_color(&widgetStyle, lv_color_hex(0xFCA420));
-   lv_style_set_bg_opa(&widgetStyle, LV_OPA_10);
-   lv_style_set_border_width(&widgetStyle, 3);
-   lv_style_set_border_color(&widgetStyle, lv_color_hex(0xFCA420));
-   lv_style_set_border_opa(&widgetStyle, LV_OPA_60);
- 
-   // ✨ Widget2 style
-   lv_style_init(&widget2Style);
-   lv_style_set_radius(&widget2Style, 16);
-   lv_style_set_bg_color(&widget2Style, lv_color_hex(0x777777));
-   lv_style_set_bg_opa(&widget2Style, LV_OPA_20);
-   lv_style_set_border_width(&widget2Style, 1);
-   lv_style_set_border_color(&widget2Style, lv_color_hex(0xFCA420));
-   lv_style_set_border_opa(&widget2Style, LV_OPA_60);
- 
-   // ✨ Glow effect
-   lv_style_init(&glowStyle);
-   lv_style_set_radius(&glowStyle, 16);
-   lv_style_set_shadow_color(&glowStyle, lv_color_hex(0xFCA420));
-   lv_style_set_shadow_width(&glowStyle, 15);
-   lv_style_set_shadow_opa(&glowStyle, LV_OPA_70);
- 
-   
-   
-   lv_scr_load(create_metrics_screen());
- 
-   lvgl_port_unlock();
- 
-   Serial.println("✅ Buttons created — touch to toggle colors.");
-   Serial.println("Enhanced UI complete.");
-   delay(500);           // ✅ Give LVGL time to build UI
-   fetchBitcoinData();
-   fetchBitcoinChartData(priceSeries, priceChart);  // Initial chart data
-   
- }
+    lv_style_init(&widgetStyle);
+    lv_style_set_radius(&widgetStyle, 16);
+    lv_style_set_bg_color(&widgetStyle, lv_color_hex(0xFCA420));
+    lv_style_set_bg_opa(&widgetStyle, LV_OPA_10);
+    lv_style_set_border_width(&widgetStyle, 3);
+    lv_style_set_border_color(&widgetStyle, lv_color_hex(0xFCA420));
+    lv_style_set_border_opa(&widgetStyle, LV_OPA_60);
+
+    // ✨ Widget2 style
+    lv_style_init(&widget2Style);
+    lv_style_set_radius(&widget2Style, 16);
+    lv_style_set_bg_color(&widget2Style, lv_color_hex(0x777777));
+    lv_style_set_bg_opa(&widget2Style, LV_OPA_20);
+    lv_style_set_border_width(&widget2Style, 1);
+    lv_style_set_border_color(&widget2Style, lv_color_hex(0xFCA420));
+    lv_style_set_border_opa(&widget2Style, LV_OPA_60);
+
+    // ✨ Glow effect
+    lv_style_init(&glowStyle);
+    lv_style_set_radius(&glowStyle, 16);
+    lv_style_set_shadow_color(&glowStyle, lv_color_hex(0xFCA420));
+    lv_style_set_shadow_width(&glowStyle, 15);
+    lv_style_set_shadow_opa(&glowStyle, LV_OPA_70);
+
+    // Load dashboard only when connected
+    lv_scr_load(create_metrics_screen());
+    lvgl_port_unlock();
+
+    Serial.println("✅ UI ready");
+    delay(500);
+    fetchBitcoinData();
+    fetchBitcoinChartData(priceSeries, priceChart);
+  }
+}
+
    
    
    void loop() {
+     if (portalModeActive) {
+    dns.processNextRequest();   // keep the captive portal DNS responsive
+  }
    static unsigned long lastUpdate = 0;
    if (millis() - lastUpdate > 30000) {
      fetchBitcoinData();
