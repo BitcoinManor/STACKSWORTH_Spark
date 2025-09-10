@@ -1,6 +1,6 @@
 
 // STACKSWORTH_Spark metrics_screen.cpp
-// SPARKv0.02
+// SPARKv0.0.3
 
 #include <Arduino.h>
 #include "metrics_screen.h"
@@ -263,8 +263,118 @@ lv_chart_refresh(priceChartMini);
   lv_obj_set_style_text_font(satsCadLabel, &lv_font_montserrat_14, 0);
 
 
-// ───────────────────────── Block Height  ─────────────────────────
-lv_obj_t* widget2 = ui::make_card(scr);                
+
+
+
+  
+/*
+
+  // Block Height Widget
+  lv_obj_t* widget2 = lv_obj_create(scr);
+  lv_obj_set_size(widget2, 240, 190);
+  lv_obj_align(widget2, LV_ALIGN_TOP_MID, 0, 40);
+  lv_obj_add_style(widget2, &widget2Style, 0);
+  lv_obj_add_style(widget2, &glowStyle, 0);
+
+  lv_obj_t* blockLabel = lv_label_create(widget2);
+  lv_label_set_text(blockLabel, "BLOCK HEIGHT");
+  lv_obj_set_style_text_color(blockLabel, lv_color_hex(0xFCA420), 0);
+  lv_obj_set_style_text_font(blockLabel, &lv_font_unscii_16, 0);
+  lv_obj_align(blockLabel, LV_ALIGN_TOP_RIGHT, 0, 0);
+
+  blockValueLabel = lv_label_create(widget2);
+  lv_label_set_text(blockValueLabel, lastBlockHeight.c_str()); // Update block height label
+  lv_obj_set_style_text_color(blockValueLabel, lv_color_hex(0xFFFFFF), 0);
+  lv_obj_set_style_text_font(blockValueLabel, &lv_font_montserrat_26, 0);
+  lv_obj_align(blockValueLabel, LV_ALIGN_TOP_RIGHT, 0, 20);
+
+
+
+
+  //SOLVED BY Widget
+  lv_obj_t* solvedByLabel = lv_label_create(widget2);
+  lv_label_set_text(solvedByLabel, "Mined By");
+  lv_obj_set_style_text_color(solvedByLabel, lv_color_hex(0xFCA420), 0);
+  lv_obj_set_style_text_font(solvedByLabel, &lv_font_unscii_16, 0);
+  lv_obj_align(solvedByLabel, LV_ALIGN_TOP_RIGHT, 0, 55);
+
+  solvedByValueLabel = lv_label_create(widget2);
+  lv_label_set_text(solvedByValueLabel, lastMiner.c_str()); // Update miner label
+  lv_obj_set_style_text_color(solvedByValueLabel, lv_color_hex(0xFFFFFF), 0);
+  lv_obj_set_style_text_font(solvedByValueLabel, &lv_font_montserrat_26, 0);
+  lv_obj_align(solvedByValueLabel, LV_ALIGN_TOP_RIGHT, 0, 75);
+
+*/
+
+
+      
+
+/*
+// ───────────────────────── Block Card1(themed) ─────────────────────────
+lv_obj_t* widget2 = ui::make_card(scr);
+lv_obj_set_size(widget2, 240, 190);
+lv_obj_align(widget2, LV_ALIGN_TOP_MID, 0, 40);
+
+// Vertical stack inside the card
+lv_obj_set_flex_flow(widget2, LV_FLEX_FLOW_COLUMN);
+lv_obj_set_style_pad_all(widget2, 12, 0);
+lv_obj_set_style_pad_row(widget2, 8, 0);
+
+// Row 1: Title (left) + age pill (right)
+lv_obj_t* blkRow1 = lv_obj_create(widget2);
+lv_obj_remove_style_all(blkRow1);
+lv_obj_set_size(blkRow1, LV_PCT(100), LV_SIZE_CONTENT);
+lv_obj_set_flex_flow(blkRow1, LV_FLEX_FLOW_ROW);
+lv_obj_set_flex_align(blkRow1, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+lv_obj_set_style_bg_opa(blkRow1, LV_OPA_TRANSP, 0);
+
+lv_obj_t* blkTitle = lv_label_create(blkRow1);
+lv_obj_add_style(blkTitle, &ui::st_title, 0);
+lv_obj_set_style_text_font(blkTitle, &lv_font_montserrat_14, 0);
+lv_label_set_text(blkTitle, "Latest Block");
+
+// Neutral pill style (once)
+static bool blkPillInit = false;
+static lv_style_t st_pill_neutral;
+if (!blkPillInit) {
+  blkPillInit = true;
+  lv_style_init(&st_pill_neutral);
+  lv_style_set_radius(&st_pill_neutral, 999);
+  lv_style_set_bg_color(&st_pill_neutral, lv_color_hex(0x243142));  // subtle slate
+  lv_style_set_bg_opa(&st_pill_neutral, LV_OPA_COVER);
+  lv_style_set_pad_hor(&st_pill_neutral, 8);
+  lv_style_set_pad_ver(&st_pill_neutral, 2);
+  lv_style_set_text_color(&st_pill_neutral, lv_color_hex(0xCBD5E1));
+  lv_style_set_text_font(&st_pill_neutral, &lv_font_montserrat_14);
+}
+
+lv_obj_t* blockAgePill = lv_label_create(blkRow1);
+lv_obj_add_style(blockAgePill, &st_pill_neutral, 0);
+lv_label_set_text(blockAgePill, "age —");  // wired next step
+
+// Big value
+blockValueLabel = lv_label_create(widget2);
+lv_obj_add_style(blockValueLabel, &ui::st_value, 0);
+lv_obj_set_style_text_font(blockValueLabel, &lv_font_montserrat_26, 0);
+lv_label_set_text(blockValueLabel, lastBlockHeight.c_str());
+
+// “Mined by …” row
+lv_obj_t* blkRow3 = lv_obj_create(widget2);
+lv_obj_remove_style_all(blkRow3);
+lv_obj_set_size(blkRow3, LV_PCT(100), LV_SIZE_CONTENT);
+lv_obj_set_style_bg_opa(blkRow3, LV_OPA_TRANSP, 0);
+
+lv_obj_t* minedBy = lv_label_create(blkRow3);
+lv_label_set_text(minedBy, "Mined by ");
+
+solvedByValueLabel = lv_label_create(blkRow3);
+lv_obj_add_style(solvedByValueLabel, &ui::st_accent_secondary, 0);
+lv_label_set_text(solvedByValueLabel, lastMiner.c_str());
+
+*/
+
+// ───────────────────────── Block Height (themed structure only) ─────────────────────────
+lv_obj_t* widget2 = ui::make_card(scr);                // themed card container (same as Price/Fees)
 lv_obj_set_size(widget2, 240, 190);
 lv_obj_align(widget2, LV_ALIGN_TOP_MID, 0, 40);
 
@@ -296,23 +406,29 @@ lv_obj_set_style_text_color(blkAge, lv_color_hex(0xCBD5E1), 0);
 lv_obj_set_style_text_font(blkAge, &lv_font_montserrat_14, 0);
 lv_label_set_text(blkAge, "age —"); // will wire later
 
-// Block height value
+// Big height value
 blockValueLabel = lv_label_create(widget2);
 lv_obj_add_style(blockValueLabel, &ui::st_value, 0);
 lv_obj_set_style_text_font(blockValueLabel, &lv_font_montserrat_26, 0);
 lv_label_set_text(blockValueLabel, lastBlockHeight.c_str());  // uses your cached value
 
-// Row 3: “Mined by … <pool>”
+// Row 3: “Mined By: <pool>”
 lv_obj_t* blkRow3 = lv_obj_create(widget2);
 lv_obj_remove_style_all(blkRow3);
 lv_obj_set_size(blkRow3, LV_PCT(100), LV_SIZE_CONTENT);
+lv_obj_set_flex_flow(blkRow3, LV_FLEX_FLOW_ROW);
+lv_obj_set_style_pad_column(blkRow3, 6, 0);
+lv_obj_set_style_bg_opa(blkRow3, LV_OPA_TRANSP, 0);
 
 lv_obj_t* minedByLabel = lv_label_create(blkRow3);
-lv_label_set_text(minedByLabel, "Mined by ");
+lv_label_set_text(minedByLabel, "Mined By:");
+lv_obj_add_style(minedByLabel, &ui::st_title, 0);
+lv_obj_set_style_text_font(minedByLabel, &lv_font_montserrat_14, 0);
 
 solvedByValueLabel = lv_label_create(blkRow3);
 lv_obj_add_style(solvedByValueLabel, &ui::st_accent_secondary, 0);
-lv_label_set_text(solvedByValueLabel, lastMiner.c_str()");     // uses your cached value
+lv_label_set_text(solvedByValueLabel, lastMiner.c_str());  // just the miner name
+lv_obj_set_style_text_font(solvedByValueLabel, &lv_font_montserrat_14, 0);
 
 
 
