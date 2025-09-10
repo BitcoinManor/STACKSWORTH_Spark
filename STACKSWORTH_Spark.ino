@@ -2,32 +2,15 @@
  *  STACKSWORTH Spark – "mainScreen" UI
  *  --------------------------------------------------
  *  Project     : STACKSWORTH Spark Firmware
- *  Version     : v0.0.3
- *  Date        : 2025-09-09
+ *  Version     : v0.0.2
  *  Device      : ESP32-S3 Waveshare 7" Touchscreen (800x480)
  *  Description : Modular Bitcoin Dashboard UI using LVGL
  *  Designer    : Bitcoin Manor 🟧
  * 
- *   Summary:
-    Adds captive-portal Wi-Fi onboarding for Spark using SoftAP + SPIFFS page,
-    stores creds in Preferences, and shows a simple on-device setup screen.
-
-  Changes:
-    - SoftAP SSID: STACKSWORTH-SPARK-<MAC suffix>
-    - Serves /STACKS_Wifi_Portal.html(.gz) from SPIFFS
-    - /save supports both application/x-www-form-urlencoded and JSON
-    - /reboot endpoint for clean restart after saving
-    - Captive DNS redirect and /ping health probe
-    - Boot flow: try saved Wi-Fi → else start portal; LVGL pre-screen in portal mode
-    - loop(): pumps DNS while portal is active
-
-  Requirements:
-    - Partition scheme with SPIFFS enabled
-    - Upload /data with STACKS_Wifi_Portal.html.gz before flashing code
- *  © STACKSWORTH
+ *  
  *  💡 Easter Egg: Try tapping the infinity label in v0.1 😉
  ***************************************************************************************/
-#define FW_VERSION "v0.0.3"
+
 
 
 
@@ -53,6 +36,10 @@
 #include <float.h>
 #include "esp_system.h"
 #include "esp_wifi.h"   // for esp_read_mac
+
+
+void ui_update_fee_badges_lmh(int low, int med, int high);
+
 
 // ==== Captive portal globals & helpers ====
 AsyncWebServer server(80);
@@ -252,19 +239,6 @@ static void format_price_usd(float value, char* out, size_t outlen, const char* 
 }
 
 
-// Define shared global variables
-//String lastPrice = "Loading...";
-//String lastFee = "Loading...";
-//String lastBlockHeight = "Loading...";
-//String lastMiner = "Loading...";
- 
- 
- // Button pointers and toggle flags
-//lv_obj_t* backBtn;
-//lv_obj_t* rightBtn;
-//bool isLeftOn = false;
-//bool isRightOn = false;
-
  
  // Styles
  String title = "STACKSWORTH Spark – Satscape v0.0.2";
@@ -359,15 +333,7 @@ lv_obj_t* portalUrlLabel = nullptr;
  }
  
  
- /*
- // Wi-Fi Credentials
- const char* ssid = "SM-S918W0853";
- const char* password = "MySamsungPhone!!!";
- //const char* ssid = "[ in-juh-noo-i-tee ]";
- //const char* password = "notachance";
- */
 
- 
  //int lastBlockHeight = 0;
 
 
@@ -508,25 +474,35 @@ http.end();
       }
       http.end();
 
-      // Step 3: Fetch Fee Estimates
-      
+     // Step 3: Fetch Fee Estimates
       http.begin("https://mempool.space/api/v1/fees/recommended");
       httpCode = http.GET();
       if (httpCode == 200) {
-          String payload = http.getString();
-          DynamicJsonDocument doc(512);
-          deserializeJson(doc, payload);
-          int fastestFee = doc["fastestFee"]; // You can also use "halfHourFee", etc.
-          char feeFormatted[16];
-          sprintf(feeFormatted, "%d sat/vB", fastestFee);
-          lastFee = feeFormatted; // Store last fee to be displayed so no blank space is present
-          lv_label_set_text(feeValueLabel, feeFormatted); // Update fee label
-          Serial.print("⚡ Fee Estimate: ");
-          Serial.println(feeFormatted);
+        String payload = http.getString();
+        DynamicJsonDocument doc(512);
+        deserializeJson(doc, payload);
+
+        // Map mempool fields → LOW/MED/HIGH
+        int high = doc["fastestFee"] | 0;                       // HIGH (red)
+        int med  = doc["halfHourFee"] | high;                   // MED  (yellow)
+        int low  = doc["economyFee"] | (doc["hourFee"] | med);  // LOW  (green)
+
+        // Keep my big label as-is (currently fastest/high)
+        char feeFormatted[16];
+        snprintf(feeFormatted, sizeof(feeFormatted), "%d sat/vB", high);
+        lastFee = feeFormatted;
+        if (feeValueLabel) lv_label_set_text(feeValueLabel, feeFormatted);
+
+        // NEW: update the three badges
+        ui_update_fee_badges_lmh(low, med, high);
+
+        Serial.printf("⚡ Fees — LOW:%d  MED:%d  HIGH:%d (big:%s)\n", low, med, high, feeFormatted);
       } else {
-          Serial.println("❌ Failed to fetch fee estimates.");
+        Serial.printf("❌ Failed to fetch fee estimates. HTTP=%d\n", httpCode);
       }
       http.end();
+
+
 
       // Step 4: Fetch Miner Information
       // Get the block hash
