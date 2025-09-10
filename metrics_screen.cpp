@@ -107,35 +107,15 @@ lv_obj_t* create_metrics_screen() {
 
 
   lv_obj_t* inf = lv_label_create(scr);
-  lv_label_set_text(inf, "SPARK v0.02");
+  lv_label_set_text(inf, "SPARK v0.0.3");
   lv_obj_set_style_text_color(inf, lv_color_hex(0xFFFFFF), 0);
   lv_obj_set_style_text_font(inf, &lv_font_montserrat_16, 0);
   lv_obj_align(inf, LV_ALIGN_BOTTOM_RIGHT, -60, 0);
 
+
+
+
 //....WIDGETS...
-
- /* // Price Widget (theme)
-  lv_obj_t* widget1 = ui::make_card(scr);
-  lv_obj_set_size(widget1, 250, 160);
-  lv_obj_align(widget1, LV_ALIGN_TOP_LEFT, 40, 40);
-
-  lv_obj_t* priceLabel = lv_label_create(widget1);
-  lv_label_set_text(priceLabel, "BITCOIN PRICE");
-  lv_obj_add_style(priceLabel, &ui::st_title, 0);
-
-  priceValueLabel = lv_label_create(widget1);
-  lv_label_set_text(priceValueLabel, lastPrice.c_str()); // Update price label
-  lv_obj_add_style(priceValueLabel, &ui::st_value, 0);
-
-  lv_obj_t* feeLabel = lv_label_create(widget1);
-  lv_label_set_text(feeLabel, "sat v/B");
-  lv_obj_add_style(feeLabel, &ui::st_title, 0);
-
-  feeValueLabel = lv_label_create(widget1);
-  lv_label_set_text(feeValueLabel, lastFee.c_str()); // Update fee label
-  lv_obj_add_style(feeValueLabel, &ui::st_value, 0);
-
-*/
 
 
   // ───────────────────────── Price Card (themed + structured) ─────────────────────────
