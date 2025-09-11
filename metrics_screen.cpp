@@ -28,6 +28,44 @@ extern lv_obj_t* backBtn;
 extern lv_obj_t* rightBtn;
 
 
+// Header buttons
+lv_obj_t* accentBtn = nullptr;
+lv_obj_t* themeBtn  = nullptr;
+lv_obj_t* themeBtnLabel = nullptr;
+static bool g_lightMode = false;  // start in dark; we’ll toggle
+
+static void ui_apply_theme(bool light) {
+  // Baby-step: switch screen background only (we’ll expand later to text/cards)
+  lv_obj_t* root = lv_scr_act();
+  if (!root) return;
+
+  if (light) {
+    lv_obj_set_style_bg_color(root, lv_color_hex(0xFFFFFF), 0); // white
+    lv_obj_set_style_bg_opa(root, LV_OPA_COVER, 0);
+  } else {
+    lv_obj_set_style_bg_color(root, lv_color_hex(0x000000), 0); // black
+    lv_obj_set_style_bg_opa(root, LV_OPA_COVER, 0);
+  }
+
+  // TODO (next baby step): flip common text styles + card bg styles.
+  // lv_obj_report_style_change(NULL); // if you change shared styles later
+}
+
+static void theme_btn_cb(lv_event_t* e) {
+  if (e->code != LV_EVENT_CLICKED) return;
+  g_lightMode = !g_lightMode;
+  ui_apply_theme(g_lightMode);
+  if (themeBtnLabel) lv_label_set_text(themeBtnLabel, g_lightMode ? "☾" : "☀");
+}
+
+static void accent_btn_cb(lv_event_t* e) {
+  if (e->code != LV_EVENT_CLICKED) return;
+  // Placeholder: later we can cycle accent palettes or open a settings screen
+  Serial.println("Accent button clicked");
+}
+
+
+
 // 🔁 Global chart references
 lv_chart_series_t* priceSeries = nullptr;
 lv_obj_t* priceChart = nullptr;
@@ -45,16 +83,25 @@ void ui_update_fee_badges_lmh(int low, int med, int high) {
   if (feeHighLabel) lv_label_set_text_fmt(feeHighLabel, "HIGH %d", high);
 }
 
-// --- Millionth block hint ---
-lv_obj_t* blocksToMillionLabel = nullptr;
+// --- Millionth block hint (split into count + suffix so we can style the number) ---
+lv_obj_t* blocksToRow = nullptr;
+lv_obj_t* blocksToCountLabel = nullptr;   // gets ui::st_accent_primary
+lv_obj_t* blocksToSuffixLabel = nullptr;
 
 void ui_update_blocks_to_million(long height) {
   long remaining = 1000000L - height;
   if (remaining < 0) remaining = 0;
-  if (blocksToMillionLabel) {
-    lv_label_set_text_fmt(blocksToMillionLabel, "%ld BLOCKS to the Millionth Block", remaining);
+
+  if (blocksToCountLabel) {
+    char buf[20];
+    snprintf(buf, sizeof(buf), "%ld", remaining);
+    lv_label_set_text(blocksToCountLabel, buf);
+  }
+  if (blocksToSuffixLabel) {
+    lv_label_set_text(blocksToSuffixLabel, " BLOCKS to One Million");
   }
 }
+
 
 
 
@@ -125,6 +172,34 @@ lv_obj_t* create_metrics_screen() {
   lv_obj_set_style_text_color(sparkLabel, lv_color_hex(0xFFFFFF), 0);
   lv_obj_set_style_text_font(sparkLabel, &lv_font_montserrat_20, 0);
   lv_obj_align(sparkLabel, LV_ALIGN_TOP_LEFT, 190, 10);
+
+  // Top-right buttons container (keeps buttons together)
+  lv_obj_t* hdrBtns = lv_obj_create(scr);
+  lv_obj_remove_style_all(hdrBtns);
+  lv_obj_set_size(hdrBtns, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+  lv_obj_set_flex_flow(hdrBtns, LV_FLEX_FLOW_ROW);
+  lv_obj_set_style_pad_gap(hdrBtns, 8, 0);
+  lv_obj_align(hdrBtns, LV_ALIGN_TOP_RIGHT, -25, 10);
+
+  // Accent button (styled)
+  accentBtn = lv_btn_create(hdrBtns);
+  lv_obj_add_style(accentBtn, &ui::st_accent_primary, 0);
+  lv_obj_set_style_radius(accentBtn, 999, 0);
+  lv_obj_set_style_pad_hor(accentBtn, 12, 0);
+  lv_obj_set_style_pad_ver(accentBtn, 6, 0);
+  lv_obj_add_event_cb(accentBtn, accent_btn_cb, LV_EVENT_CLICKED, NULL);
+  lv_obj_t* accentLbl = lv_label_create(accentBtn);
+  lv_label_set_text(accentLbl, "ACCENT");
+
+  // Theme toggle (☀ / ☾)
+  themeBtn = lv_btn_create(hdrBtns);
+  lv_obj_set_style_radius(themeBtn, 999, 0);
+  lv_obj_set_style_pad_hor(themeBtn, 12, 0);
+  lv_obj_set_style_pad_ver(themeBtn, 6, 0);
+  lv_obj_add_event_cb(themeBtn, theme_btn_cb, LV_EVENT_CLICKED, NULL);
+  themeBtnLabel = lv_label_create(themeBtn);
+  lv_label_set_text(themeBtnLabel, "☀");     // start dark → show sun to indicate "tap for light"
+
 
 
   lv_obj_t* inf = lv_label_create(scr);
@@ -327,13 +402,26 @@ lv_obj_add_style(solvedByValueLabel, &ui::st_accent_secondary, 0);
 lv_label_set_text(solvedByValueLabel, lastMiner.c_str());  // just the miner name
 lv_obj_set_style_text_font(solvedByValueLabel, &lv_font_montserrat_14, 0);
 
-// Small, centered hint under the block card
-blocksToMillionLabel = lv_label_create(widget2);           
-lv_obj_set_width(blocksToMillionLabel, LV_PCT(100));
-lv_obj_set_style_text_align(blocksToMillionLabel, LV_TEXT_ALIGN_CENTER, 0);
-lv_obj_set_style_text_color(blocksToMillionLabel, lv_color_hex(0x9AA0A6), 0); // subtle grey
-lv_obj_set_style_text_font(blocksToMillionLabel, &lv_font_montserrat_12, 0);
-lv_label_set_text(blocksToMillionLabel, "—");  // placeholder until first update
+// Hint row: "NNNNNN BLOCKS to the Millionth Block"
+blocksToRow = lv_obj_create(widget2);              // widget2 = your Block card container
+lv_obj_remove_style_all(blocksToRow);
+lv_obj_set_size(blocksToRow, LV_PCT(100), LV_SIZE_CONTENT);
+lv_obj_set_flex_flow(blocksToRow, LV_FLEX_FLOW_ROW);
+lv_obj_set_style_pad_gap(blocksToRow, 4, 0);
+lv_obj_set_style_bg_opa(blocksToRow, LV_OPA_TRANSP, 0);
+
+// Number (accent)
+blocksToCountLabel = lv_label_create(blocksToRow);
+lv_obj_add_style(blocksToCountLabel, &ui::st_accent_primary, 0);
+lv_obj_set_style_text_font(blocksToCountLabel, &lv_font_montserrat_14, 0);
+lv_label_set_text(blocksToCountLabel, "--");
+
+// Suffix (subtle)
+blocksToSuffixLabel = lv_label_create(blocksToRow);
+lv_obj_set_style_text_color(blocksToSuffixLabel, lv_color_hex(0x9AA0A6), 0);
+lv_obj_set_style_text_font(blocksToSuffixLabel, &lv_font_montserrat_12, 0);
+lv_label_set_text(blocksToSuffixLabel, " BLOCKS to the Millionth Block");
+
 
 
 
@@ -374,42 +462,46 @@ lv_label_set_text(blocksToMillionLabel, "—");  // placeholder until first upda
   lv_obj_set_style_text_font(feeValueLabel, &lv_font_montserrat_26, 0); // ↑ value size
 
 // Row: fee tier badges (LOW / MED / HIGH)
-lv_obj_t* feeTiersRow = lv_obj_create(widget3);         // widget3 = your mempool card container
+lv_obj_t* feeTiersRow = lv_obj_create(widget3);
 lv_obj_remove_style_all(feeTiersRow);
 lv_obj_set_size(feeTiersRow, LV_PCT(100), LV_SIZE_CONTENT);
-lv_obj_set_flex_flow(feeTiersRow, LV_FLEX_FLOW_ROW);
-lv_obj_set_style_pad_gap(feeTiersRow, 8, 0);
+lv_obj_set_flex_flow(feeTiersRow, LV_FLEX_FLOW_ROW_WRAP);   // allow wrap if needed
+lv_obj_set_style_pad_gap(feeTiersRow, 6, 0);                // was 8
 lv_obj_set_style_bg_opa(feeTiersRow, LV_OPA_TRANSP, 0);
 
 // --- LOW (green) ---
 feeLowLabel = lv_label_create(feeTiersRow);
 lv_obj_set_style_radius(feeLowLabel, 999, 0);
-lv_obj_set_style_pad_hor(feeLowLabel, 10, 0);
-lv_obj_set_style_pad_ver(feeLowLabel, 4, 0);
+lv_obj_set_style_pad_hor(feeLowLabel, 8, 0);   // was 10
+lv_obj_set_style_pad_ver(feeLowLabel, 2, 0);   // was 4
 lv_obj_set_style_bg_opa(feeLowLabel, LV_OPA_COVER, 0);
-lv_obj_set_style_bg_color(feeLowLabel, lv_color_hex(0x22C55E), 0);  // green
+lv_obj_set_style_bg_color(feeLowLabel, lv_color_hex(0x22C55E), 0);
 lv_obj_set_style_text_color(feeLowLabel, lv_color_hex(0xFFFFFF), 0);
+lv_obj_set_style_text_font(feeLowLabel, &lv_font_montserrat_12, 0);  // smaller font
 lv_label_set_text(feeLowLabel, "LOW --");
 
 // --- MED (yellow) ---
 feeMedLabel = lv_label_create(feeTiersRow);
 lv_obj_set_style_radius(feeMedLabel, 999, 0);
-lv_obj_set_style_pad_hor(feeMedLabel, 10, 0);
-lv_obj_set_style_pad_ver(feeMedLabel, 4, 0);
+lv_obj_set_style_pad_hor(feeMedLabel, 8, 0);   // was 10
+lv_obj_set_style_pad_ver(feeMedLabel, 2, 0);   // was 4
 lv_obj_set_style_bg_opa(feeMedLabel, LV_OPA_COVER, 0);
-lv_obj_set_style_bg_color(feeMedLabel, lv_color_hex(0xF59E0B), 0);  // yellow
-lv_obj_set_style_text_color(feeMedLabel, lv_color_hex(0x111111), 0); // dark text reads better on yellow
+lv_obj_set_style_bg_color(feeMedLabel, lv_color_hex(0xF59E0B), 0);
+lv_obj_set_style_text_color(feeMedLabel, lv_color_hex(0x111111), 0);
+lv_obj_set_style_text_font(feeMedLabel, &lv_font_montserrat_12, 0);  // smaller font
 lv_label_set_text(feeMedLabel, "MED --");
 
 // --- HIGH (red) ---
 feeHighLabel = lv_label_create(feeTiersRow);
 lv_obj_set_style_radius(feeHighLabel, 999, 0);
-lv_obj_set_style_pad_hor(feeHighLabel, 10, 0);
-lv_obj_set_style_pad_ver(feeHighLabel, 4, 0);
+lv_obj_set_style_pad_hor(feeHighLabel, 8, 0);  // was 10
+lv_obj_set_style_pad_ver(feeHighLabel, 2, 0);  // was 4
 lv_obj_set_style_bg_opa(feeHighLabel, LV_OPA_COVER, 0);
-lv_obj_set_style_bg_color(feeHighLabel, lv_color_hex(0xEF4444), 0); // red
+lv_obj_set_style_bg_color(feeHighLabel, lv_color_hex(0xEF4444), 0);
 lv_obj_set_style_text_color(feeHighLabel, lv_color_hex(0xFFFFFF), 0);
+lv_obj_set_style_text_font(feeHighLabel, &lv_font_montserrat_12, 0); // smaller font
 lv_label_set_text(feeHighLabel, "HIGH --");
+
 
   
 
