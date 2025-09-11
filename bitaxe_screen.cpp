@@ -54,13 +54,13 @@ lv_obj_t* create_bitaxe_screen() {
   lv_label_set_text(blokdbitLabel, "STACKSWORTH");
   lv_obj_set_style_text_color(blokdbitLabel, lv_color_hex(0xFCA420), 0);
   lv_obj_set_style_text_font(blokdbitLabel, &lv_font_montserrat_20, 0);
-  lv_obj_align(blokdbitLabel, LV_ALIGN_TOP_RIGHT, 25, 10);
+  lv_obj_align(blokdbitLabel, LV_ALIGN_TOP_LEFT, 25, 10);
 
   lv_obj_t* sparkLabel = lv_label_create(scr);
   lv_label_set_text(sparkLabel, "SPARK");
   lv_obj_set_style_text_color(sparkLabel, lv_color_hex(0xFFFFFF), 0);
   lv_obj_set_style_text_font(sparkLabel, &lv_font_montserrat_20, 0);
-  lv_obj_align(sparkLabel, LV_ALIGN_TOP_RIGHT, 195, 10);
+  lv_obj_align(sparkLabel, LV_ALIGN_TOP_LEFT, 195, 10);
 
   lv_obj_t* priceheightLabel = lv_label_create(scr);
   lv_label_set_text(priceheightLabel, "Bitaxe Hub");
