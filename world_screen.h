@@ -1,9 +1,12 @@
-// BLOKDBIT_Spark world_screen.h
-// SPARKv0.03
+// STACKSWORTH_Spark world_screen.h
+// SPARKv0.0.3
 
 
 #pragma once
 #include <lvgl.h>
+#include <Arduino.h>
+
+
 
 // Shared state and controls
 extern bool isRightOn;
@@ -24,3 +27,9 @@ extern lv_style_t greenStyle;
 extern lv_style_t blueStyle;
 
 lv_obj_t* create_world_screen();
+
+
+// UI updaters (called from .ino after fetches)
+void ui_weather_set_location(const String& city, const String& region, const String& country);
+void ui_weather_set_current(int tempC, const String& condition);
+void ui_weather_set_time(const String& timeStr);
