@@ -6,6 +6,7 @@
 #include <Arduino.h>
 #include "world_screen.h"
 #include "screen_manager.h"
+#include "ui_theme.h"
 
 
 //External shared Objects
@@ -38,7 +39,10 @@ void onTouchEvent_world_screen(lv_event_t* e) {
 }
 
 
-
+// Handles to labels we’ll update
+static lv_obj_t* timeLabel = nullptr;
+static lv_obj_t* locationLabel = nullptr;
+static lv_obj_t* weatherLabel = nullptr;
  
 
 
@@ -76,9 +80,37 @@ lv_obj_t* create_world_screen() {
   lv_obj_align(priceheightLabel, LV_ALIGN_TOP_RIGHT, -25, 10);
 
 
-  
+   // Card
+  lv_obj_t* card = ui::make_card(scr);
+  lv_obj_set_size(card, 680, 360);
+  lv_obj_align(card, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_all(card, 20, 0);
+  lv_obj_set_style_pad_row(card, 14, 0);
 
+  // Title
+  lv_obj_t* title = lv_label_create(card);
+  lv_obj_add_style(title, &ui::st_title, 0);
+  lv_obj_set_style_text_font(title, &lv_font_montserrat_16, 0);
+  lv_label_set_text(title, "TIME • LOCATION • WEATHER");
 
+  // Big time
+  timeLabel = lv_label_create(card);
+  lv_obj_add_style(timeLabel, &ui::st_value, 0);
+  lv_obj_set_style_text_font(timeLabel, &lv_font_montserrat_48, 0);
+  lv_label_set_text(timeLabel, "--:--");
+
+  // Location line (City, State/Province, Country)
+  locationLabel = lv_label_create(card);
+  lv_obj_add_style(locationLabel, &ui::st_subtle, 0);
+  lv_obj_set_style_text_font(locationLabel, &lv_font_montserrat_16, 0);
+  lv_label_set_text(locationLabel, "—");
+
+  // Weather line (e.g., 21°C — Partly Cloudy)
+  weatherLabel = lv_label_create(card);
+  lv_obj_add_style(weatherLabel, &ui::st_accent_secondary, 0);
+  lv_obj_set_style_text_font(weatherLabel, &lv_font_montserrat_20, 0);
+  lv_label_set_text(weatherLabel, "—");
 
   //...BUTTONS...
 
@@ -96,7 +128,31 @@ lv_obj_t* create_world_screen() {
   lv_obj_align(rightBtn, LV_ALIGN_RIGHT_MID, -30, 20);
   lv_obj_add_style(rightBtn, &blueStyle, 0);
   lv_obj_add_event_cb(rightBtn, onTouchEvent_world_screen, LV_EVENT_CLICKED, NULL);
-  
 
   return scr;
 }
+
+void ui_weather_set_time(const String& timeStr) {
+  if (timeLabel) lv_label_set_text(timeLabel, timeStr.c_str());
+}
+
+void ui_weather_set_location(const String& city, const String& region, const String& country) {
+  if (!locationLabel) return;
+  String line = city;
+  if (region.length())  line += ", " + region;
+  if (country.length()) line += ", " + country;
+  if (!line.length())   line = "—";
+  lv_label_set_text(locationLabel, line.c_str());
+}
+
+void ui_weather_set_current(int tempC, const String& condition) {
+  if (!weatherLabel) return;
+  char buf[64];
+  snprintf(buf, sizeof(buf), "%d°C — %s", tempC, condition.c_str());
+  lv_label_set_text(weatherLabel, buf);
+}
+
+
+
+  
+  
