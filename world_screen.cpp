@@ -60,11 +60,11 @@ lv_obj_t* create_world_screen() {
 
   // Title labels
 
-  lv_obj_t* blokdbitLabel = lv_label_create(scr);
-  lv_label_set_text(blokdbitLabel, "STACKSWORTH");
-  lv_obj_set_style_text_color(blokdbitLabel, lv_color_hex(0xFCA420), 0);
-  lv_obj_set_style_text_font(blokdbitLabel, &lv_font_montserrat_20, 0);
-  lv_obj_align(blokdbitLabel, LV_ALIGN_TOP_LEFT, 25, 10);
+  lv_obj_t* stacksworthLabel = lv_label_create(scr);
+  lv_label_set_text(stacksworthLabel, "STACKSWORTH");
+  lv_obj_set_style_text_color(stacksworthLabel, lv_color_hex(0xFCA420), 0);
+  lv_obj_set_style_text_font(stacksworthLabel, &lv_font_montserrat_20, 0);
+  lv_obj_align(stacksworthLabel, LV_ALIGN_TOP_LEFT, 25, 10);
 
   lv_obj_t* sparkLabel = lv_label_create(scr);
   lv_label_set_text(sparkLabel, "// SPARK");
@@ -73,16 +73,16 @@ lv_obj_t* create_world_screen() {
   lv_obj_align(sparkLabel, LV_ALIGN_TOP_LEFT, 190, 10);
 
 
-  lv_obj_t* priceheightLabel = lv_label_create(scr);
-  lv_label_set_text(priceheightLabel, "WEATHER VIEW");
-  lv_obj_set_style_text_color(priceheightLabel, lv_color_hex(0xFCA420), 0);
-  lv_obj_set_style_text_font(priceheightLabel, &lv_font_montserrat_20, 0);
-  lv_obj_align(priceheightLabel, LV_ALIGN_TOP_RIGHT, -25, 10);
+  lv_obj_t* mainWeatherLabel = lv_label_create(scr);
+  lv_label_set_text(mainWeatherLabel, "WEATHER");
+  lv_obj_set_style_text_color(mainWeatherLabel, lv_color_hex(0xFCA420), 0);
+  lv_obj_set_style_text_font(mainWeatherLabel, &lv_font_montserrat_20, 0);
+  lv_obj_align(mainWeatherLabel, LV_ALIGN_TOP_RIGHT, -25, 10);
 
 
    // Card
   lv_obj_t* card = ui::make_card(scr);
-  lv_obj_set_size(card, 680, 360);
+  lv_obj_set_size(card, 660, 360);
   lv_obj_align(card, LV_ALIGN_CENTER, 0, 0);
   lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_style_pad_all(card, 20, 0);
@@ -97,19 +97,25 @@ lv_obj_t* create_world_screen() {
   // Big time
   timeLabel = lv_label_create(card);
   lv_obj_add_style(timeLabel, &ui::st_value, 0);
+  lv_obj_set_width(timeLabel, LV_PCT(100));              // allow center text
+  lv_obj_set_style_text_align(timeLabel, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_style_text_font(timeLabel, &lv_font_montserrat_48, 0);
   lv_label_set_text(timeLabel, "--:--");
 
   // Location line (City, State/Province, Country)
   locationLabel = lv_label_create(card);
   lv_obj_add_style(locationLabel, &ui::st_subtle, 0);
-  lv_obj_set_style_text_font(locationLabel, &lv_font_montserrat_16, 0);
+  lv_obj_set_width(locationLabel, LV_PCT(100));              // allow center text
+  lv_obj_set_style_text_align(locationLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_font(locationLabel, &lv_font_montserrat_38, 0);
   lv_label_set_text(locationLabel, "—");
 
   // Weather line (e.g., 21°C — Partly Cloudy)
   weatherLabel = lv_label_create(card);
   lv_obj_add_style(weatherLabel, &ui::st_accent_secondary, 0);
-  lv_obj_set_style_text_font(weatherLabel, &lv_font_montserrat_20, 0);
+  lv_obj_set_width(weatherLabel, LV_PCT(100));              // allow center text
+  lv_obj_set_style_text_align(weatherLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_font(weatherLabel, &lv_font_montserrat_30, 0);
   lv_label_set_text(weatherLabel, "—");
 
   //...BUTTONS...
@@ -117,7 +123,7 @@ lv_obj_t* create_world_screen() {
   // Back Button
   backBtn = lv_obj_create(scr);
   lv_obj_set_size(backBtn, 30, 30);
-  lv_obj_align(backBtn, LV_ALIGN_LEFT_MID, 40, 20);
+  lv_obj_align(backBtn, LV_ALIGN_LEFT_MID, 25, 20);
   lv_obj_add_style(backBtn, &orangeStyle, 0);
   lv_obj_add_event_cb(backBtn, onTouchEvent_world_screen, LV_EVENT_CLICKED, NULL);
 
@@ -125,7 +131,7 @@ lv_obj_t* create_world_screen() {
   // Right Button
   rightBtn = lv_obj_create(scr);
   lv_obj_set_size(rightBtn, 30, 30);
-  lv_obj_align(rightBtn, LV_ALIGN_RIGHT_MID, -30, 20);
+  lv_obj_align(rightBtn, LV_ALIGN_RIGHT_MID, -25, 20);
   lv_obj_add_style(rightBtn, &blueStyle, 0);
   lv_obj_add_event_cb(rightBtn, onTouchEvent_world_screen, LV_EVENT_CLICKED, NULL);
 
