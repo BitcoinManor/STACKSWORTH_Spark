@@ -23,6 +23,10 @@ lv_obj_t* satsCadLabel = nullptr;
 lv_obj_t* changePillLabel = nullptr;
 lv_obj_t* priceChartMini = nullptr;
 lv_chart_series_t* priceSeriesMini = nullptr;
+lv_obj_t* low24Label  = nullptr;
+lv_obj_t* high24Label = nullptr;
+lv_obj_t* vol24Label  = nullptr;
+
 
 extern lv_obj_t* backBtn;
 extern lv_obj_t* rightBtn;
@@ -186,7 +190,7 @@ void ui_cache_price_aux(const String& cadLine,
   
 
 
-  // BLOKDBIT SPARK Labels
+  // STACKSWORTH SPARK Labels
 
   lv_obj_t* stacksworthLabel = lv_label_create(scr);
   lv_label_set_text(stacksworthLabel, "STACKSWORTH");
@@ -538,7 +542,7 @@ if (c_feeLow >= 0 && c_feeMed >= 0 && c_feeHigh >= 0) {
 
 
 
-  // ───────────────────────── Footer: 24H Price Card (themed) ─────────────────────────
+// ───────────────────────── Footer: 24H Price Card (themed) ─────────────────────────
 lv_obj_t* footer = ui::make_card(scr);
 lv_obj_set_size(footer, 680, 160);
 lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -30);
@@ -570,16 +574,51 @@ lv_chart_set_type(priceChart, LV_CHART_TYPE_LINE);
 lv_chart_set_point_count(priceChart, 24);
 lv_chart_set_div_line_count(priceChart, 0, 0);
 lv_chart_set_update_mode(priceChart, LV_CHART_UPDATE_MODE_SHIFT);
-
-// series color = accent secondary (teal), to match the mini sparkline
 priceSeries = lv_chart_add_series(priceChart, ui::accent_secondary(), LV_CHART_AXIS_PRIMARY_Y);
-
-// seed + range (kept from your old footer)
-for (int i = 0; i < lv_chart_get_point_count(priceChart); i++) {
-  priceSeries->y_points[i] = 30000;
-}
+for (int i = 0; i < lv_chart_get_point_count(priceChart); i++) priceSeries->y_points[i] = 30000;
 lv_chart_set_range(priceChart, LV_CHART_AXIS_PRIMARY_Y, 20000, 80000);
 lv_chart_refresh(priceChart);
+
+// Row 3: 24h stat pills (outline-only)
+static bool st_pill_outline_inited = false;
+static lv_style_t st_pill_outline_teal, st_pill_outline_orange, st_pill_outline_slate;
+if (!st_pill_outline_inited) {
+  st_pill_outline_inited = true;
+  auto init_outline = [](lv_style_t* st, lv_color_t border){
+    lv_style_init(st);
+    lv_style_set_radius(st, 999);
+    lv_style_set_bg_opa(st, LV_OPA_TRANSP);
+    lv_style_set_border_width(st, 1);
+    lv_style_set_border_color(st, border);
+    lv_style_set_text_color(st, lv_color_hex(0xCBD5E1));
+    lv_style_set_pad_hor(st, 10);
+    lv_style_set_pad_ver(st, 4);
+    lv_style_set_text_font(st, &lv_font_montserrat_12);
+  };
+  init_outline(&st_pill_outline_teal,   ui::accent_secondary());
+  init_outline(&st_pill_outline_orange, ui::accent_primary());
+  init_outline(&st_pill_outline_slate,  lv_color_hex(0x243142));
+}
+
+lv_obj_t* statsRow = lv_obj_create(footer);
+lv_obj_remove_style_all(statsRow);
+lv_obj_set_size(statsRow, LV_PCT(100), LV_SIZE_CONTENT);
+lv_obj_set_flex_flow(statsRow, LV_FLEX_FLOW_ROW);
+lv_obj_set_style_pad_gap(statsRow, 8, 0);
+lv_obj_set_style_bg_opa(statsRow, LV_OPA_TRANSP, 0);
+
+low24Label = lv_label_create(statsRow);
+lv_obj_add_style(low24Label, &st_pill_outline_teal, 0);
+lv_label_set_text(low24Label, "Low 24h: —");
+
+high24Label = lv_label_create(statsRow);
+lv_obj_add_style(high24Label, &st_pill_outline_orange, 0);
+lv_label_set_text(high24Label, "High 24h: —");
+
+vol24Label = lv_label_create(statsRow);
+lv_obj_add_style(vol24Label, &st_pill_outline_slate, 0);
+lv_label_set_text(vol24Label, "Vol 24h: —");
+
 
 
 
@@ -608,30 +647,53 @@ lv_chart_refresh(priceChart);
 // --------------------------------------------------
 // Updates the 24h change pill text + style (green/red)
 void ui_update_change_pill(float changePct) {
-    c_changePct = changePct;
-    c_changePct_set = true;
-    
-    if (!changePillLabel) return;
+  c_changePct = changePct;
+  c_changePct_set = true;
+  if (!changePillLabel) return;
 
-    // integer-safe formatting (no %f)
-    char sign = (changePct >= 0) ? '+' : '-';
-    float absPct = changePct >= 0 ? changePct : -changePct;
-    int whole = (int)absPct;
-    int frac  = (int)((absPct - whole) * 100 + 0.5f);   // 2 decimals, rounded
+  char sign = (changePct >= 0) ? '+' : '-';
+  float absPct = changePct >= 0 ? changePct : -changePct;
+  int whole = (int)absPct;
+  int frac  = (int)((absPct - whole) * 100 + 0.5f);
 
-    lv_label_set_text_fmt(changePillLabel, "24h: %c%d.%02d%%", sign, whole, frac);
+  lv_label_set_text_fmt(changePillLabel, "24h: %c%d.%02d%%", sign, whole, frac);
+  lv_obj_set_style_bg_color(changePillLabel,
+                            (changePct >= 0) ? lv_color_hex(0x22C55E) : lv_color_hex(0xEF4444), 0);
+  lv_obj_set_style_text_color(changePillLabel, lv_color_hex(0xFFFFFF), 0);
+  lv_obj_set_style_radius(changePillLabel, 999, 0);
+  lv_obj_set_style_pad_hor(changePillLabel, 8, 0);
+  lv_obj_set_style_pad_ver(changePillLabel, 2, 0);
+  lv_obj_set_style_bg_opa(changePillLabel, LV_OPA_COVER, 0);
+}
 
-    // Flip background color based on sign
-    if (changePct >= 0) {
-        lv_obj_set_style_bg_color(changePillLabel, lv_color_hex(0x22C55E), 0);
-    } else {
-        lv_obj_set_style_bg_color(changePillLabel, lv_color_hex(0xEF4444), 0);
-    }
+// Compact USD formatter: $12,345 (no cents), K/M/B for large values
+static void fmt_usd_compact(float v, char* out, size_t outlen){
+  double a = v;
+  const char* suffix = "";
+  if (a >= 1e9)      { a /= 1e9;  suffix = "B"; }
+  else if (a >= 1e6) { a /= 1e6;  suffix = "M"; }
+  else if (a >= 1e3) { a /= 1e3;  suffix = "K"; }
 
-    // keep pill styling consistent
-    lv_obj_set_style_text_color(changePillLabel, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_radius(changePillLabel, 999, 0);
-    lv_obj_set_style_pad_hor(changePillLabel, 8, 0);
-    lv_obj_set_style_pad_ver(changePillLabel, 2, 0);
-    lv_obj_set_style_bg_opa(changePillLabel, LV_OPA_COVER, 0);
+  if (*suffix) snprintf(out, outlen, "$%.2f%s", a, suffix);
+  else {
+    unsigned long whole = (unsigned long)(a + 0.5);
+    String s = String(whole);
+    for (int i = s.length() - 3; i > 0; i -= 3) s = s.substring(0, i) + "," + s.substring(i);
+    snprintf(out, outlen, "$%s", s.c_str());
+  }
+}
+
+void ui_update_24h_stats(float lowUsd, float highUsd, float volUsd){
+  if (low24Label){
+    char b[32]; fmt_usd_compact(lowUsd, b, sizeof(b));
+    lv_label_set_text_fmt(low24Label,  "Low 24h: %s",  b);
+  }
+  if (high24Label){
+    char b[32]; fmt_usd_compact(highUsd, b, sizeof(b));
+    lv_label_set_text_fmt(high24Label, "High 24h: %s", b);
+  }
+  if (vol24Label){
+    char b[32]; fmt_usd_compact(volUsd, b, sizeof(b));
+    lv_label_set_text_fmt(vol24Label,  "Vol 24h: %s",  b);
+  }
 }
