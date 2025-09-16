@@ -267,6 +267,14 @@ static String now_time_12h() {
   return String(buf);
 }
 
+// Is the RTC actually set yet?
+static bool timeIsValid() {
+  struct tm tm;
+  if (!getLocalTime(&tm)) return false;
+  return tm.tm_year >= (2020 - 1900);  // >= 2020
+}
+
+
 // City -> lat/lon using Nominatim
 static bool geocode_city(String city, float &lat, float &lon,
                          String &outCity, String &outRegion, String &outCountry) {
@@ -750,6 +758,15 @@ void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
   }
 
   JsonArray prices = doc["prices"];
+  // ADDED: grab last 24h volume (USD)
+  JsonArray volsArr = doc["total_volumes"];
+  float volLast = 0.0f;
+  if (!volsArr.isNull() && volsArr.size() > 0) {
+    volLast = volsArr[volsArr.size()-1][1] | 0.0f;
+  }
+  // Paint the outline pills on the Price card
+  ui_update_24h_stats(minv, maxv, volLast);
+  
   size_t n = prices.size();
   Serial.printf("[chart] points available: %u\n", (unsigned)n);
   if (n < 2) return;
@@ -772,6 +789,10 @@ void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
       lv_chart_set_value_by_id(chart, series, i, (lv_coord_t)p);
     }
   }
+
+// ADDED: update 24h stat pills
+  ui_update_24h_stats(minv, maxv, volLast);
+  
 
   // 2) Footer chart: apply a little padding so the line isn't touching edges
   if (chart) {
