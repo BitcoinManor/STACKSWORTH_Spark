@@ -70,6 +70,15 @@ static void accent_btn_cb(lv_event_t* e) {
 lv_chart_series_t* priceSeries = nullptr;
 lv_obj_t* priceChart = nullptr;
 
+// --- Persisted cache for instant paint on screen re-entry ---
+static String c_priceCad;      // e.g., "CAD $91,234.56"
+static String c_satsUsd;       // e.g., "1452 SATS / $1 USD"
+static String c_satsCad;       // e.g., "1320 SATS / $1 CAD"
+static int    c_feeLow  = -1, c_feeMed = -1, c_feeHigh = -1;
+static float  c_changePct = 0.0f;
+static bool   c_changePct_set = false;   // track validity without isnan
+
+
 
 // --- Fee tier badges (LOW / MED / HIGH) ---
 lv_obj_t* feeLowLabel  = nullptr;
@@ -78,6 +87,9 @@ lv_obj_t* feeHighLabel = nullptr;
 
 // Public helper so the .ino can update all three at once
 void ui_update_fee_badges_lmh(int low, int med, int high) {
+  // cache
+  c_feeLow = low; c_feeMed = med; c_feeHigh = high;
+  // paint
   if (feeLowLabel)  lv_label_set_text_fmt(feeLowLabel,  "LOW %d",  low);
   if (feeMedLabel)  lv_label_set_text_fmt(feeMedLabel,  "MED %d",  med);
   if (feeHighLabel) lv_label_set_text_fmt(feeHighLabel, "HIGH %d", high);
@@ -131,10 +143,25 @@ void onTouchEvent_metrics_screen(lv_event_t* e) {
 }
 
 
+void ui_cache_price_aux(const String& cadLine,
+                        const String& satsUsdLine,
+                        const String& satsCadLine) {
+  // Save
+  c_priceCad = cadLine;
+  c_satsUsd  = satsUsdLine;
+  c_satsCad  = satsCadLine;
+
+  // Paint if labels exist
+  if (priceCadLabel && c_priceCad.length()) lv_label_set_text(priceCadLabel, c_priceCad.c_str());
+  if (satsUsdLabel  && c_satsUsd.length())  lv_label_set_text(satsUsdLabel,  c_satsUsd.c_str());
+  if (satsCadLabel  && c_satsCad.length())  lv_label_set_text(satsCadLabel,  c_satsCad.c_str());
+}
+
+
 
  // Create and return a new screen
 
-lv_obj_t* create_metrics_screen() {
+  lv_obj_t* create_metrics_screen() {
   lv_obj_t* scr = lv_obj_create(NULL);
   ui::apply_root_bg(scr);                        // apply new theme background
 
@@ -265,6 +292,7 @@ lv_obj_t* create_metrics_screen() {
   // 24h change pill (placeholder until wired)
   changePillLabel = lv_label_create(row1);
   lv_label_set_text(changePillLabel, "24h: …");
+  if (c_changePct_set) ui_update_change_pill(c_changePct);
   lv_obj_add_style(changePillLabel, &st_pill_down, 0); // default red; we’ll flip style after we compute change
 
   // --- Row 2: Big USD price (white)
@@ -274,10 +302,11 @@ lv_obj_t* create_metrics_screen() {
   lv_obj_set_style_text_font(priceValueLabel, &lv_font_montserrat_30, 0);
 
   // --- Row 3: CAD price (smaller than title)
-  priceCadLabel = lv_label_create(widget1);   // reuse global to keep a handle; we'll set text to CAD price for now
+  priceCadLabel = lv_label_create(widget1);
   lv_obj_add_style(priceCadLabel, &ui::st_subtle, 0);
-  lv_label_set_text(priceCadLabel, "CAD: …");   // we’ll compute and set this after we fetch price/CAD
   lv_obj_set_style_text_font(priceCadLabel, &lv_font_montserrat_14, 0);
+  lv_label_set_text(priceCadLabel, c_priceCad.length() ? c_priceCad.c_str() : "CAD: …");
+
 
   // --- Row 4: mini sparkline (teal line, no dots)
 priceChartMini = lv_chart_create(widget1);
@@ -330,13 +359,15 @@ lv_chart_refresh(priceChartMini);
   // --- Row 5: SATS per $ lines (accent secondary = teal)
   satsUsdLabel = lv_label_create(widget1);
   lv_obj_add_style(satsUsdLabel, &ui::st_accent_primary, 0);
-  lv_label_set_text(satsUsdLabel, "… SATS / $1 USD");
   lv_obj_set_style_text_font(satsUsdLabel, &lv_font_montserrat_14, 0);
+  lv_label_set_text(satsUsdLabel, c_satsUsd.length() ? c_satsUsd.c_str() : "… SATS / $1 USD");
 
-  satsCadLabel = lv_label_create(widget1); // keep your existing “CAD” line as accent too
+
+  satsCadLabel = lv_label_create(widget1);
   lv_obj_add_style(satsCadLabel, &ui::st_accent_secondary, 0);
-  lv_label_set_text(satsCadLabel, "… SATS / $1 CAD");
   lv_obj_set_style_text_font(satsCadLabel, &lv_font_montserrat_14, 0);
+  lv_label_set_text(satsCadLabel, c_satsCad.length() ? c_satsCad.c_str() : "… SATS / $1 CAD");
+
 
 
 
@@ -422,7 +453,9 @@ lv_obj_set_style_text_color(blocksToSuffixLabel, lv_color_hex(0x9AA0A6), 0);
 lv_obj_set_style_text_font(blocksToSuffixLabel, &lv_font_montserrat_12, 0);
 lv_label_set_text(blocksToSuffixLabel, " BLOCKS to the Millionth Block");
 
-
+if (lastBlockHeight.length()) {
+  ui_update_blocks_to_million(lastBlockHeight.toInt());
+}
 
 
 
@@ -451,11 +484,7 @@ lv_label_set_text(blocksToSuffixLabel, " BLOCKS to the Millionth Block");
   lv_obj_set_style_pad_column(feeRow, 8, 0);
   lv_obj_set_style_bg_opa(feeRow, LV_OPA_TRANSP, 0);
 
-  //lv_obj_t* feeLabel = lv_label_create(feeRow);
-  //lv_obj_add_style(feeLabel, &ui::st_title, 0);
-  //lv_label_set_text(feeLabel, "sat/vB");
-  //lv_obj_set_style_text_font(feeLabel, &lv_font_montserrat_20, 0); // ↑ label size
-       
+        
   feeValueLabel = lv_label_create(feeRow);
   lv_obj_add_style(feeValueLabel, &ui::st_value, 0);
   lv_label_set_text(feeValueLabel, lastFee.c_str());
@@ -502,63 +531,55 @@ lv_obj_set_style_text_color(feeHighLabel, lv_color_hex(0xFFFFFF), 0);
 lv_obj_set_style_text_font(feeHighLabel, &lv_font_montserrat_12, 0); // smaller font
 lv_label_set_text(feeHighLabel, "HIGH --");
 
-
+if (c_feeLow >= 0 && c_feeMed >= 0 && c_feeHigh >= 0) {
+  ui_update_fee_badges_lmh(c_feeLow, c_feeMed, c_feeHigh);
+}
   
 
 
 
-  //****FOOTER***//
-  
-  lv_obj_t* footer = lv_obj_create(scr);
-  lv_obj_set_size(footer, 680, 160);
-  lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -30);
-  lv_obj_add_style(footer, &widget2Style, 0);
-  lv_obj_add_style(footer, &glowStyle, 0);
+  // ───────────────────────── Footer: 24H Price Card (themed) ─────────────────────────
+lv_obj_t* footer = ui::make_card(scr);
+lv_obj_set_size(footer, 680, 160);
+lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -30);
+lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_COLUMN);
+lv_obj_set_style_pad_all(footer, 12, 0);
+lv_obj_set_style_pad_row(footer, 6, 0);
 
+// Row 1: title
+lv_obj_t* footRow = lv_obj_create(footer);
+lv_obj_remove_style_all(footRow);
+lv_obj_set_size(footRow, LV_PCT(100), LV_SIZE_CONTENT);
+lv_obj_set_flex_flow(footRow, LV_FLEX_FLOW_ROW);
+lv_obj_set_flex_align(footRow,
+                      LV_FLEX_ALIGN_SPACE_BETWEEN,
+                      LV_FLEX_ALIGN_CENTER,
+                      LV_FLEX_ALIGN_CENTER);
 
-  // 📊 Price Chart Setup
-  priceChart = lv_chart_create(footer);
-  lv_obj_set_size(priceChart, 640, 50); // Fits footer
-  lv_obj_align(priceChart, LV_ALIGN_TOP_MID, 0, 10);
-  lv_chart_set_type(priceChart, LV_CHART_TYPE_LINE);
-  lv_chart_set_point_count(priceChart, 24); // 24 data points (hourly)
-  lv_chart_set_div_line_count(priceChart, 0, 0);
-  lv_chart_set_range(priceChart, LV_CHART_AXIS_PRIMARY_Y, 20000, 80000); // Placeholder BTC range
+lv_obj_t* priceChartLabel = lv_label_create(footRow);
+lv_obj_add_style(priceChartLabel, &ui::st_title, 0);
+lv_obj_set_style_text_font(priceChartLabel, &lv_font_montserrat_14, 0);
+lv_label_set_text(priceChartLabel, "24H Bitcoin Price");
 
-  
- 
+// Row 2: chart
+priceChart = lv_chart_create(footer);
+lv_obj_set_size(priceChart, 640, 90);
+lv_obj_set_style_bg_opa(priceChart, LV_OPA_TRANSP, 0);
+lv_obj_set_style_border_width(priceChart, 0, 0);
+lv_chart_set_type(priceChart, LV_CHART_TYPE_LINE);
+lv_chart_set_point_count(priceChart, 24);
+lv_chart_set_div_line_count(priceChart, 0, 0);
+lv_chart_set_update_mode(priceChart, LV_CHART_UPDATE_MODE_SHIFT);
 
-  // Optional: make the background more subtle
-  lv_obj_set_style_bg_opa(priceChart, LV_OPA_10, 0);
+// series color = accent secondary (teal), to match the mini sparkline
+priceSeries = lv_chart_add_series(priceChart, ui::accent_secondary(), LV_CHART_AXIS_PRIMARY_Y);
 
-  
-
-  // Optional: make the chart scroll automatically
-  lv_chart_set_update_mode(priceChart, LV_CHART_UPDATE_MODE_SHIFT);
-
-  // Series for BTC price line
-  priceSeries = lv_chart_add_series(priceChart, lv_palette_main(LV_PALETTE_BLUE), LV_CHART_AXIS_PRIMARY_Y);
-
-  // Fill with dummy data initially (flatline $30,000)
-  for (int i = 0; i < lv_chart_get_point_count(priceChart); i++) {
-    priceSeries->y_points[i] = 30000;
-  }
-  lv_chart_refresh(priceChart);
-
-
-  
-
-  // Match existing UI styles
-  lv_obj_add_style(priceChart, &widget2Style, 0);
-  
-
-  
-
-  lv_obj_t* priceChartLabel = lv_label_create(footer);
-  lv_label_set_text(priceChartLabel, "24HR Bitcoin Price Chart ");
-  lv_obj_set_style_text_color(priceChartLabel, lv_color_hex(0xFFFFFF), 0);
-  lv_obj_set_style_text_font(priceChartLabel, &lv_font_montserrat_14, 0);
-  lv_obj_align(priceChartLabel, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+// seed + range (kept from your old footer)
+for (int i = 0; i < lv_chart_get_point_count(priceChart); i++) {
+  priceSeries->y_points[i] = 30000;
+}
+lv_chart_set_range(priceChart, LV_CHART_AXIS_PRIMARY_Y, 20000, 80000);
+lv_chart_refresh(priceChart);
 
 
 
@@ -567,7 +588,7 @@ lv_label_set_text(feeHighLabel, "HIGH --");
   // Back Button
   backBtn = lv_obj_create(scr);
   lv_obj_set_size(backBtn, 30, 30);
-  lv_obj_align(backBtn, LV_ALIGN_LEFT_MID, 40, 20);
+  lv_obj_align(backBtn, LV_ALIGN_LEFT_MID, 25, 20);
   lv_obj_add_style(backBtn, &orangeStyle, 0);
   lv_obj_add_event_cb(backBtn, onTouchEvent_metrics_screen, LV_EVENT_CLICKED, NULL);
 
@@ -575,7 +596,7 @@ lv_label_set_text(feeHighLabel, "HIGH --");
   // Right Button
   rightBtn = lv_obj_create(scr);
   lv_obj_set_size(rightBtn, 30, 30);
-  lv_obj_align(rightBtn, LV_ALIGN_RIGHT_MID, -30, 20);
+  lv_obj_align(rightBtn, LV_ALIGN_RIGHT_MID, -25, 20);
   lv_obj_add_style(rightBtn, &blueStyle, 0);
   lv_obj_add_event_cb(rightBtn, onTouchEvent_metrics_screen, LV_EVENT_CLICKED, NULL);
 
@@ -587,6 +608,9 @@ lv_label_set_text(feeHighLabel, "HIGH --");
 // --------------------------------------------------
 // Updates the 24h change pill text + style (green/red)
 void ui_update_change_pill(float changePct) {
+    c_changePct = changePct;
+    c_changePct_set = true;
+    
     if (!changePillLabel) return;
 
     // integer-safe formatting (no %f)
