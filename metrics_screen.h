@@ -3,6 +3,7 @@
 
 
 #pragma once
+#include <Arduino.h>
 #include <lvgl.h>
 
 
@@ -45,3 +46,12 @@ lv_obj_t* create_metrics_screen();
 
 // Updates the 24h change pill text + style (green/red)
 void ui_update_change_pill(float changePct);
+
+// cache + paint helpers so the screen shows instantly on navigation
+void ui_cache_price_aux(const String& cadLine,
+                        const String& satsUsdLine,
+                        const String& satsCadLine);
+
+// Update the 24h low / high / volume pills (USD)
+void ui_update_24h_stats(float lowUsd, float highUsd, float volUsd);
+                        
