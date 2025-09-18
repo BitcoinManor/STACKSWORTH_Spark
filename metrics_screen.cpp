@@ -6,6 +6,8 @@
 #include "metrics_screen.h"
 #include "screen_manager.h"
 #include "ui_theme.h"
+#include <time.h>
+
 
 extern String lastPrice;
 extern String lastFee;
@@ -26,6 +28,11 @@ lv_chart_series_t* priceSeriesMini = nullptr;
 lv_obj_t* low24Label  = nullptr;
 lv_obj_t* high24Label = nullptr;
 lv_obj_t* vol24Label  = nullptr;
+
+lv_obj_t* blkAgeLabel = nullptr;
+
+// cache last-known block timestamp (UNIX seconds)
+static uint32_t c_block_ts = 0;
 
 
 extern lv_obj_t* backBtn;
@@ -118,6 +125,46 @@ void ui_update_blocks_to_million(long height) {
   }
 }
 
+
+// Make compact "age" text like "57s", "12m", "1h 23m"
+static void format_age_short(uint32_t secs, char* out, size_t n) {
+  if (secs < 90) {                       // under ~1.5 min, show seconds
+    snprintf(out, n, "%us", (unsigned)secs);
+    return;
+  }
+  uint32_t mins = secs / 60;
+  if (mins < 90) {                       // under ~1.5 hr, show minutes
+    snprintf(out, n, "%um", (unsigned)mins);
+    return;
+  }
+  uint32_t hrs  = mins / 60;
+  uint32_t remm = mins % 60;
+  if (remm == 0) snprintf(out, n, "%uh", (unsigned)hrs);
+  else           snprintf(out, n, "%uh %um", (unsigned)hrs, (unsigned)remm);
+}
+
+// Paint the pill from a UNIX timestamp (and cache it)
+void ui_update_block_age_from_unix(uint32_t block_ts) {
+  c_block_ts = block_ts;
+
+  if (!blkAgeLabel) return;           // UI not built yet—cache only
+
+  time_t now = time(nullptr);
+  if (now <= 0 || block_ts == 0) {
+    lv_label_set_text(blkAgeLabel, "age —");
+    return;
+  }
+  uint32_t delta = (now > (time_t)block_ts) ? (uint32_t)(now - block_ts) : 0;
+  char buf[24];
+  format_age_short(delta, buf, sizeof(buf));
+  lv_label_set_text_fmt(blkAgeLabel, "age %s", buf);
+}
+
+// Cheap ticker (re-renders from cached UNIX ts)
+void ui_tick_block_age() {
+  if (c_block_ts == 0 || !blkAgeLabel) return;
+  ui_update_block_age_from_unix(c_block_ts);
+}
 
 
 
@@ -403,15 +450,19 @@ lv_obj_set_style_text_font(blkTitle, &lv_font_montserrat_14, 0);
 lv_label_set_text(blkTitle, "BLOCK HEIGHT");
 
 // neutral “pill” placeholder (no timing/fetch yet)
-lv_obj_t* blkAge = lv_label_create(blkRow1);
-lv_obj_set_style_radius(blkAge, 999, 0);
-lv_obj_set_style_bg_color(blkAge, lv_color_hex(0x243142), 0); // subtle slate
-lv_obj_set_style_bg_opa(blkAge, LV_OPA_COVER, 0);
-lv_obj_set_style_pad_hor(blkAge, 8, 0);
-lv_obj_set_style_pad_ver(blkAge, 2, 0);
-lv_obj_set_style_text_color(blkAge, lv_color_hex(0xCBD5E1), 0);
-lv_obj_set_style_text_font(blkAge, &lv_font_montserrat_14, 0);
-lv_label_set_text(blkAge, "age —"); // will wire later
+blkAgeLabel = lv_label_create(blkRow1);
+
+lv_obj_set_style_radius(blkAgeLabel, 999, 0);
+lv_obj_set_style_bg_color(blkAgeLabel, lv_color_hex(0x243142), 0);
+lv_obj_set_style_bg_opa(blkAgeLabel, LV_OPA_COVER, 0);
+lv_obj_set_style_pad_hor(blkAgeLabel, 8, 0);
+lv_obj_set_style_pad_ver(blkAgeLabel, 2, 0);
+lv_obj_set_style_text_color(blkAgeLabel, lv_color_hex(0xCBD5E1), 0);
+lv_obj_set_style_text_font(blkAgeLabel, &lv_font_montserrat_14, 0);
+lv_label_set_text(blkAgeLabel, "age —");
+
+// if we already know the latest block timestamp, render it immediately
+if (c_block_ts) ui_tick_block_age();
 
 // Big height value
 blockValueLabel = lv_label_create(widget2);
