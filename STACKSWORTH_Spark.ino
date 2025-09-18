@@ -655,6 +655,33 @@ http.end();
       }
       http.end();
 
+      // After obtaining blockHash
+      if (blockHash.length()) {
+        String blockUrl = "https://mempool.space/api/block/" + blockHash;
+        http.begin(blockUrl);
+        httpCode = http.GET();
+        if (httpCode == 200) {
+          String payload = http.getString();
+          DynamicJsonDocument bdoc(2048);
+          DeserializationError berr = deserializeJson(bdoc, payload);
+          if (!berr) {
+            uint32_t ts = bdoc["timestamp"] | 0;    // mempool.space uses `timestamp`
+            if (ts > 0) {
+              ui_update_block_age_from_unix(ts);    // paints + caches
+            }
+          } else {
+            Serial.printf("❌ Block JSON parse: %s\n", berr.c_str());
+          }
+        } else {
+          Serial.printf("❌ Block fetch failed: %d\n", httpCode);
+        }
+        http.end();
+      }
+
+
+
+      
+
       if (blockHash != "") {
           // Get the coinbase TXID directly
           String cbTxUrl = "https://mempool.space/api/block/" + blockHash + "/txid/0";
@@ -764,8 +791,7 @@ void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
   if (!volsArr.isNull() && volsArr.size() > 0) {
     volLast = volsArr[volsArr.size()-1][1] | 0.0f;
   }
-  // Paint the outline pills on the Price card
-  ui_update_24h_stats(minv, maxv, volLast);
+  
   
   size_t n = prices.size();
   Serial.printf("[chart] points available: %u\n", (unsigned)n);
