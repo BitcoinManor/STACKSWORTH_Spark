@@ -546,36 +546,31 @@ if (httpCode == 200) {
     format_price_usd(usd, usdBuf, sizeof(usdBuf));  // → "$69,420.13"
     lastPrice = usdBuf;
     if (priceValueLabel) lv_label_set_text(priceValueLabel, usdBuf);
-
     Serial.print("💰 Bitcoin Price (USD): "); Serial.println(usdBuf);
 
-    // SATS / $1 USD
-    if (satsUsdLabel && usd > 0.0f) {
-      int sats_usd = (int)(100000000.0f / usd);
-      lv_label_set_text_fmt(satsUsdLabel, "%d SATS / $1 USD", sats_usd);
-    }
+    // --- NEW: build the three lines we want to cache + paint
+    char cadCore[32];
+    format_price_usd(cad, cadCore, sizeof(cadCore));     // "$69,420.13"
+    String cadLine = String("CAD ") + cadCore;
 
-    // CAD price (small line, Row 3)
-    if (priceCadLabel) {
-      char cadBuf[40];
-      char cadCore[32];
-      format_price_usd(cad, cadCore, sizeof(cadCore)); // gives "$69,420.13"
-      snprintf(cadBuf, sizeof(cadBuf), "CAD %s", cadCore);
-      lv_label_set_text(priceCadLabel, cadBuf);
+    int sats_usd = (usd > 0.0f) ? (int)(100000000.0f / usd) : 0;
+    int sats_cad = (cad > 0.0f) ? (int)(100000000.0f / cad) : 0;
+    String satsUsdLine = sats_usd ? String(sats_usd) + " SATS / $1 USD" : String("… SATS / $1 USD");
+    String satsCadLine = sats_cad ? String(sats_cad) + " SATS / $1 CAD" : String("… SATS / $1 CAD");
 
-      Serial.print("💵 Bitcoin Price (CAD): "); Serial.println(cadBuf);
-    }
+    // Cache + paint (ensures instant render when you re-enter the screen)
+    ui_cache_price_aux(cadLine, satsUsdLine, satsCadLine);
 
-    // SATS / $1 CAD
-    if (satsCadLabel && cad > 0.0f) {
-      int sats_cad = (int)(100000000.0f / cad);
-      lv_label_set_text_fmt(satsCadLabel, "%d SATS / $1 CAD", sats_cad);
-    }
+    // (Optional) These direct sets are now redundant, but harmless if you keep them:
+    if (priceCadLabel) lv_label_set_text(priceCadLabel, cadLine.c_str());
+    if (satsUsdLabel)  lv_label_set_text(satsUsdLabel,  satsUsdLine.c_str());
+    if (satsCadLabel)  lv_label_set_text(satsCadLabel,  satsCadLine.c_str());
+
+    Serial.print("💵 Bitcoin Price (CAD): "); Serial.println(cadLine);
 
     float changePct = doc["bitcoin"]["usd_24h_change"] | 0.0f;
     Serial.printf("[price] 24h change (usd): %+.2f%%\n", changePct);
     ui_update_change_pill(changePct);
-
 
     // Push to chart (USD for now)
     if (priceChart && priceSeries) {
@@ -587,6 +582,7 @@ if (httpCode == 200) {
     Serial.printf("❌ Failed to fetch Bitcoin price. HTTP=%d\n", httpCode);
 }
 http.end();
+
 
 
 
@@ -979,6 +975,15 @@ if (millis() - t1 > period) {
   ui_weather_set_time(now_time_12h());
   t1 = millis();
 }
+
+
+// Re-render the "age" text every 60s (cheap)
+static unsigned long t_age = 0;
+if (millis() - t_age > 60000UL) {
+  ui_tick_block_age();
+  t_age = millis();
+}
+
 
 
 // Refresh weather every 30 minutes
