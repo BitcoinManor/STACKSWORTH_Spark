@@ -1,5 +1,5 @@
 // STACKSWORTH_Spark bigstats_screen.cpp
-// SPARKv0.02
+// SPARKv0.0.3
 
 
 #include <Arduino.h>
@@ -8,6 +8,37 @@
 #include "ui_theme.h"
 #include "data_store.h"
 
+// --- Bigstats: instant paint from Cache ---
+static void hydrate_bigstats_from_cache() {
+  // Price block
+  const auto& p = Cache::price;
+  if (priceValueLabel && p.usdPretty.length())
+    lv_label_set_text(priceValueLabel, p.usdPretty.c_str());
+
+  if (priceCadLabel && p.cadLine.length())
+    lv_label_set_text(priceCadLabel, p.cadLine.c_str());
+
+  if (satsUsdLabel && p.satsUsd.length())
+    lv_label_set_text(satsUsdLabel, p.satsUsd.c_str());
+
+  if (satsCadLabel && p.satsCad.length())
+    lv_label_set_text(satsCadLabel, p.satsCad.c_str());
+
+  if (changePillLabel && p.changeValid) {
+    // reuse the same styling logic you already have in metrics
+    ui_update_change_pill(p.changePct);
+  }
+
+  // Mini sparkline
+  const auto& ch = Cache::chart;
+  if (priceChartMini && priceSeriesMini && ch.valid) {
+    // points[] are already USD values; mini[] is the 0..100 normalized sparkline
+    for (int i = 0; i < 24; ++i) {
+      lv_chart_set_value_by_id(priceChartMini, priceSeriesMini, i, (lv_coord_t)ch.mini[i]);
+    }
+    lv_chart_refresh(priceChartMini);
+  }
+}
 
 
 
@@ -227,7 +258,7 @@ lv_obj_set_style_text_font(satsCadLabel, &lv_font_montserrat_16, 0);
 lv_label_set_text(satsCadLabel, "… SATS / $1 CAD");
 
 
-
+hydrate_bigstats_from_cache();
 
 
   //...BUTTONS...
