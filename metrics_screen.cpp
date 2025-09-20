@@ -7,6 +7,8 @@
 #include "screen_manager.h"
 #include "ui_theme.h"
 #include <time.h>
+#include "data_store.h"
+
 
 
 extern String lastPrice;
@@ -28,7 +30,6 @@ lv_chart_series_t* priceSeriesMini = nullptr;
 lv_obj_t* low24Label  = nullptr;
 lv_obj_t* high24Label = nullptr;
 lv_obj_t* vol24Label  = nullptr;
-
 lv_obj_t* blkAgeLabel = nullptr;
 
 // cache last-known block timestamp (UNIX seconds)
@@ -37,6 +38,21 @@ static uint32_t c_block_ts = 0;
 
 extern lv_obj_t* backBtn;
 extern lv_obj_t* rightBtn;
+
+
+// Forward declaration
+static void hydrate_metrics_from_cache();
+
+
+// --- small helpers ---
+static inline void set_text_if(lv_obj_t* lbl, const String& s) {
+  if (lbl && s.length()) lv_label_set_text(lbl, s.c_str());
+}
+
+static inline void set_fee_pill(lv_obj_t* lbl, const char* name, int v) {
+  if (!lbl) return;
+  if (v >= 0) lv_label_set_text_fmt(lbl, "%s %d", name, v);
+}
 
 
 // Header buttons
@@ -209,8 +225,77 @@ void ui_cache_price_aux(const String& cadLine,
 }
 
 
+static void hydrate_metrics_from_cache() {
+ const auto& price = Cache::price;
+ const auto& block = Cache::block;
+ const auto& fees  = Cache::fees;
+ const auto& chart = Cache::chart;
 
- // Create and return a new screen
+  // --- Price / change ---
+  if (priceValueLabel && price.usdPretty.length())
+    lv_label_set_text(priceValueLabel, price.usdPretty.c_str());
+
+  if (priceCadLabel && price.cadLine.length())
+    lv_label_set_text(priceCadLabel, price.cadLine.c_str());
+
+  if (satsUsdLabel && price.satsUsd.length())
+    lv_label_set_text(satsUsdLabel, price.satsUsd.c_str());
+
+  if (satsCadLabel && price.satsCad.length())
+    lv_label_set_text(satsCadLabel, price.satsCad.c_str());
+
+  if (changePillLabel && price.changeValid)
+    ui_update_change_pill(price.changePct);
+
+  // --- Fees ---
+  if (feeValueLabel && fees.high >= 0) {
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d sat/vB", fees.high);
+    lv_label_set_text(feeValueLabel, buf);
+  }
+  if (fees.low >= 0 && fees.med >= 0 && fees.high >= 0) {
+    ui_update_fee_badges_lmh(fees.low, fees.med, fees.high);
+  }
+
+  // --- Block + age + millionth hint ---
+  if (blockValueLabel && block.height.length())
+    lv_label_set_text(blockValueLabel, block.height.c_str());
+
+  if (solvedByValueLabel && block.miner.length())
+    lv_label_set_text(solvedByValueLabel, block.miner.c_str());
+
+  if (block.height.length())
+    ui_update_blocks_to_million(block.height.toInt());
+
+  if (block.ts > 0)
+    ui_update_block_age_from_unix(block.ts);
+
+  // --- 24h stat pills ---
+  ui_update_24h_stats(chart.low, chart.high, chart.volUsd);
+
+  // --- Footer chart (24 points) ---
+  if (priceChart && priceSeries) {
+    for (int i = 0; i < 24; i++) {
+      lv_chart_set_value_by_id(priceChart, priceSeries, i, (lv_coord_t)chart.points[i]);
+    }
+    lv_chart_set_range(priceChart, LV_CHART_AXIS_PRIMARY_Y,
+                       (lv_coord_t)chart.low, (lv_coord_t)chart.high);
+    lv_chart_refresh(priceChart);
+  }
+
+  // --- Mini sparkline (0..100) ---
+  if (priceChartMini && priceSeriesMini) {
+    for (int i = 0; i < 24; i++) {
+      lv_chart_set_value_by_id(priceChartMini, priceSeriesMini, i, (lv_coord_t)chart.mini[i]);
+    }
+    lv_chart_refresh(priceChartMini);
+  }
+}
+
+
+
+
+ //CREATE METRICS SCREEN
 
   lv_obj_t* create_metrics_screen() {
   lv_obj_t* scr = lv_obj_create(NULL);
@@ -261,7 +346,7 @@ void ui_cache_price_aux(const String& cadLine,
 
   // Accent button (styled)
   accentBtn = lv_btn_create(hdrBtns);
-  lv_obj_add_style(accentBtn, &ui::st_accent_primary, 0);
+  lv_obj_add_style(accentBtn, &ui::st_accent_secondary, 0);
   lv_obj_set_style_radius(accentBtn, 999, 0);
   lv_obj_set_style_pad_hor(accentBtn, 12, 0);
   lv_obj_set_style_pad_ver(accentBtn, 6, 0);
@@ -689,6 +774,8 @@ lv_label_set_text(vol24Label, "Vol 24h: —");
   lv_obj_align(rightBtn, LV_ALIGN_RIGHT_MID, -25, 20);
   lv_obj_add_style(rightBtn, &blueStyle, 0);
   lv_obj_add_event_cb(rightBtn, onTouchEvent_metrics_screen, LV_EVENT_CLICKED, NULL);
+
+hydrate_metrics_from_cache();
 
 
   return scr;
