@@ -6,7 +6,7 @@
 #include "bigstats_screen.h"
 #include "screen_manager.h"
 #include "ui_theme.h"
-
+#include "data_store.h"
 
 
 
@@ -61,7 +61,7 @@ lv_obj_t* create_bigstats_screen() {
 
 
 
-   // BLOKDBIT SPARK Labels
+   // STACKSWORTH SPARK Labels
 
   lv_obj_t* blokdbitLabel = lv_label_create(scr);
   lv_label_set_text(blokdbitLabel, "STACKSWORTH");
@@ -77,7 +77,7 @@ lv_obj_t* create_bigstats_screen() {
 
 
   lv_obj_t* inf = lv_label_create(scr);
-  lv_label_set_text(inf, "SPARK v0.02");
+  lv_label_set_text(inf, "SPARK v0.0.3");
   lv_obj_set_style_text_color(inf, lv_color_hex(0xFFFFFF), 0);
   lv_obj_set_style_text_font(inf, &lv_font_montserrat_16, 0);
   lv_obj_align(inf, LV_ALIGN_BOTTOM_RIGHT, -60, 0);
@@ -249,7 +249,3 @@ lv_label_set_text(satsCadLabel, "… SATS / $1 CAD");
 
   return scr;
 }
-
-
-
-
