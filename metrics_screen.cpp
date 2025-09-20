@@ -91,6 +91,12 @@ static void accent_btn_cb(lv_event_t* e) {
   Serial.println("Accent button clicked");
 }
 
+// Tap Price card → go to Big Stats
+static void price_card_cb(lv_event_t* e) {
+  if (e->code != LV_EVENT_CLICKED) return;
+  Serial.println("🟧 Price card tapped → Big Stats");
+  load_screen(1);  // bigstats_screen
+}
 
 
 // 🔁 Global chart references
@@ -506,6 +512,10 @@ lv_chart_refresh(priceChartMini);
 
 
 
+// Make the whole Price card tappable
+lv_obj_add_flag(widget1, LV_OBJ_FLAG_CLICKABLE);
+lv_obj_clear_flag(widget1, LV_OBJ_FLAG_SCROLLABLE);  // avoid “scroll” eating the tap
+lv_obj_add_event_cb(widget1, price_card_cb, LV_EVENT_CLICKED, NULL);
 
 
 
