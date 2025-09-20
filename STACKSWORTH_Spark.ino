@@ -38,6 +38,9 @@
 #include <float.h>
 #include "esp_system.h"
 #include "esp_wifi.h"   // for esp_read_mac
+#include "data_store.h"
+
+
 
 void ui_update_blocks_to_million(long height);
 
@@ -541,14 +544,14 @@ if (httpCode == 200) {
     float usd = doc["bitcoin"]["usd"] | 0.0f;
     float cad = doc["bitcoin"]["cad"] | 0.0f;
 
-    // USD price
+    // USD price (pretty)
     char usdBuf[32];
     format_price_usd(usd, usdBuf, sizeof(usdBuf));  // → "$69,420.13"
     lastPrice = usdBuf;
     if (priceValueLabel) lv_label_set_text(priceValueLabel, usdBuf);
     Serial.print("💰 Bitcoin Price (USD): "); Serial.println(usdBuf);
 
-    // --- NEW: build the three lines we want to cache + paint
+    // Build CAD line and SATS/$ lines
     char cadCore[32];
     format_price_usd(cad, cadCore, sizeof(cadCore));     // "$69,420.13"
     String cadLine = String("CAD ") + cadCore;
@@ -558,21 +561,35 @@ if (httpCode == 200) {
     String satsUsdLine = sats_usd ? String(sats_usd) + " SATS / $1 USD" : String("… SATS / $1 USD");
     String satsCadLine = sats_cad ? String(sats_cad) + " SATS / $1 CAD" : String("… SATS / $1 CAD");
 
-    // Cache + paint (ensures instant render when you re-enter the screen)
+    // 24h change
+    float changePct = doc["bitcoin"]["usd_24h_change"] | 0.0f;
+    Serial.printf("[price] 24h change (usd): %+.2f%%\n", changePct);
+
+    // ---- WRITE TO SHARED CACHE (so other screens hydrate instantly)
+    {
+      auto& p = Cache::price;
+      p.usdPretty   = usdBuf;        // "$69,420.13"
+      p.cadLine     = cadLine;       // "CAD $92,314.55"
+      p.satsUsd     = satsUsdLine;   // "1450 SATS / $1 USD"
+      p.satsCad     = satsCadLine;   // "1320 SATS / $1 CAD"
+      p.changePct   = changePct;
+      p.changeValid = true;
+    }
+
+    // Optional: still cache+paint the local per-screen strings
     ui_cache_price_aux(cadLine, satsUsdLine, satsCadLine);
 
-    // (Optional) These direct sets are now redundant, but harmless if you keep them:
+    // (These direct sets are now redundant but harmless)
     if (priceCadLabel) lv_label_set_text(priceCadLabel, cadLine.c_str());
     if (satsUsdLabel)  lv_label_set_text(satsUsdLabel,  satsUsdLine.c_str());
     if (satsCadLabel)  lv_label_set_text(satsCadLabel,  satsCadLine.c_str());
 
     Serial.print("💵 Bitcoin Price (CAD): "); Serial.println(cadLine);
 
-    float changePct = doc["bitcoin"]["usd_24h_change"] | 0.0f;
-    Serial.printf("[price] 24h change (usd): %+.2f%%\n", changePct);
+    // Update the pill (also reads from the same changePct we stored)
     ui_update_change_pill(changePct);
 
-    // Push to chart (USD for now)
+    // Push to footer chart (USD for now)
     if (priceChart && priceSeries) {
       lv_chart_set_next_value(priceChart, priceSeries, (int)usd);
       lv_chart_refresh(priceChart);
@@ -586,25 +603,28 @@ http.end();
 
 
 
-      // Step 2: Fetch Block Height
+
+     // Step 2: Fetch Block Height
 http.begin("https://mempool.space/api/blocks/tip/height");
 httpCode = http.GET();
 if (httpCode == 200) {
-    String blockHeightStr = http.getString();
+  String blockHeightStr = http.getString();
 
-    // Update the big label as before
-    lastBlockHeight = blockHeightStr;
-    if (blockValueLabel) lv_label_set_text(blockValueLabel, lastBlockHeight.c_str());
+  lastBlockHeight = blockHeightStr;
+  if (blockValueLabel) lv_label_set_text(blockValueLabel, lastBlockHeight.c_str());
 
-    // NEW: update the “BLOCKS to the Millionth Block” hint
-    long h = blockHeightStr.toInt();     // mempool returns a plain number string
-    if (h > 0) ui_update_blocks_to_million(h);
+  long h = blockHeightStr.toInt();
+  if (h > 0) ui_update_blocks_to_million(h);
 
-    Serial.printf("📏 Block Height: %ld\n", h);
+  // 🔒 CACHE → shared data store
+  Cache::block.height = blockHeightStr;
+
+  Serial.printf("📏 Block Height: %ld\n", h);
 } else {
-    Serial.println("❌ Failed to fetch block height.");
+  Serial.println("❌ Failed to fetch block height.");
 }
 http.end();
+
 
 
      // Step 3: Fetch Fee Estimates
@@ -625,6 +645,15 @@ http.end();
         snprintf(feeFormatted, sizeof(feeFormatted), "%d sat/vB", high);
         lastFee = feeFormatted;
         if (feeValueLabel) lv_label_set_text(feeValueLabel, feeFormatted);
+
+
+        // 🔒 CACHE → shared data store
+        {
+          auto& f = Cache::fees;
+          f.low = low; 
+          f.med = med; 
+          f.high = high;
+        }
 
         // NEW: update the three badges
         ui_update_fee_badges_lmh(low, med, high);
@@ -653,26 +682,28 @@ http.end();
 
       // After obtaining blockHash
       if (blockHash.length()) {
-        String blockUrl = "https://mempool.space/api/block/" + blockHash;
-        http.begin(blockUrl);
-        httpCode = http.GET();
-        if (httpCode == 200) {
-          String payload = http.getString();
-          DynamicJsonDocument bdoc(2048);
-          DeserializationError berr = deserializeJson(bdoc, payload);
-          if (!berr) {
-            uint32_t ts = bdoc["timestamp"] | 0;    // mempool.space uses `timestamp`
-            if (ts > 0) {
-              ui_update_block_age_from_unix(ts);    // paints + caches
-            }
-          } else {
-            Serial.printf("❌ Block JSON parse: %s\n", berr.c_str());
-          }
-        } else {
-          Serial.printf("❌ Block fetch failed: %d\n", httpCode);
-        }
-        http.end();
+  String blockUrl = "https://mempool.space/api/block/" + blockHash;
+  http.begin(blockUrl);
+  httpCode = http.GET();
+  if (httpCode == 200) {
+    String payload = http.getString();
+    DynamicJsonDocument bdoc(2048);
+    DeserializationError berr = deserializeJson(bdoc, payload);
+    if (!berr) {
+      uint32_t ts = bdoc["timestamp"] | 0;
+      if (ts > 0) {
+        ui_update_block_age_from_unix(ts);      // paint pill
+        // 🔒 CACHE → shared data store
+        Cache::block.ts = ts;
       }
+    } else {
+      Serial.printf("❌ Block JSON parse: %s\n", berr.c_str());
+    }
+  } else {
+    Serial.printf("❌ Block fetch failed: %d\n", httpCode);
+  }
+  http.end();
+}
 
 
 
@@ -736,6 +767,9 @@ http.end();
 
                       lv_label_set_text(solvedByValueLabel, miner.c_str()); // Update miner label
                       Serial.printf("✅ Solved by: %s\n", miner.c_str());
+
+                     // 🔒 CACHE → shared data store
+                     Cache::block.miner = miner; 
                       
                   }
               } else {
@@ -836,6 +870,24 @@ void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
     }
     lv_chart_refresh(priceChartMini);
   }
+  {
+  auto& ch = Cache::chart;
+  const int targetPts = 24;   // make sure this matches your DataStore array sizes
+
+  for (int i = 0; i < targetPts; i++) {
+    size_t idx = (size_t)((float)i * (n - 1) / (targetPts - 1));
+    float pY = prices[idx][1];
+    float y  = (maxv > minv) ? ((pY - minv) * 100.0f / (maxv - minv)) : 50.0f;
+
+    ch.points[i] = pY;   // footer chart (USD)
+    ch.mini[i]   = y;    // mini sparkline (0..100)
+  }
+
+  ch.low  = minv;
+  ch.high = maxv;
+  ch.volUsd  = volLast;
+  ch.valid = true;
+}
 }
 
 
