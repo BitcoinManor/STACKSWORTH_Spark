@@ -9,6 +9,24 @@
 #include <time.h>
 #include "data_store.h"
 
+// --- theme accent -> hex for label recolor (#RRGGBB text#) ---
+static void color_to_hex6(lv_color_t c, char out6[7]) {
+  // lv_color_to32 returns 0x00RRGGBB (A unused for recolor)
+  uint32_t v = lv_color_to32(c);
+  uint8_t r = (v >> 16) & 0xFF;
+  uint8_t g = (v >>  8) & 0xFF;
+  uint8_t b =  v        & 0xFF;
+  snprintf(out6, 7, "%02X%02X%02X", r, g, b);
+}
+
+// Stored copies of the current theme accents as HEX text (no leading '#')
+static char g_hex_primary[7]   = "FCA420"; // default/fallback
+static char g_hex_secondary[7] = "00D1FF"; // default/fallback
+
+static void refresh_accent_hex_from_theme() {
+  color_to_hex6(ui::accent_primary(),   g_hex_primary);
+  color_to_hex6(ui::accent_secondary(), g_hex_secondary);
+}
 
 
 extern String lastPrice;
@@ -81,30 +99,36 @@ void ui_update_mid_metrics(float hashrateEh,
                            float circBtc,
                            float athUsd,
                            int   athDaysAgo,
-                           float fromAthPct)
+                           float /*fromAthPct*/)
 {
   if (!midLine1Label || !midLine2Label) return;
 
-  // Line 1: Hashrate + Difficulty (with arrow)
-  char l1[128];
+  // Line 1 (PRIMARY accent)
   const char arrow = (diffPct > 0) ? '▲' : ((diffPct < 0) ? '▼' : '◆');
-  float absPct = diffPct >= 0 ? diffPct : -diffPct;
-  snprintf(l1, sizeof(l1), "Hashrate: %.0f EH/s  •  Diff: %c%.2f%% (%dd)",
-           hashrateEh, arrow, absPct, diffDaysAgo);
+  const float absPct = diffPct >= 0 ? diffPct : -diffPct;
+
+  char l1[200];
+  snprintf(l1, sizeof(l1),
+           "Hashrate: #%s %.0f EH/s#  •  Diff: #%s %c%.2f%%%# (#%s %dd#)",
+           g_hex_primary, hashrateEh,
+           g_hex_primary, arrow, absPct,
+           g_hex_primary, diffDaysAgo);
   lv_label_set_text(midLine1Label, l1);
 
-  // Line 2: Market Cap (compact), Circulating, ATH (days ago)
-  char capBuf[32]; fmt_usd_compact(marketCapUsd, capBuf, sizeof capBuf);
-  char circBuf[48]; {
-    unsigned long circ = (circBtc >= 0) ? (unsigned long)(circBtc + 0.5f) : 0;
-    char circNum[24]; fmt_int_commas_ul(circ, circNum, sizeof circNum);
-    snprintf(circBuf, sizeof(circBuf), "%s / 21,000,000", circNum);
-  }
-  char athBuf[32]; fmt_usd_compact(athUsd, athBuf, sizeof athBuf);
+  // Helpers
+  char capBuf[32];  fmt_usd_compact(marketCapUsd, capBuf, sizeof capBuf);
+  unsigned long circ = (circBtc >= 0) ? (unsigned long)(circBtc + 0.5f) : 0;
+  char circNum[24]; fmt_int_commas_ul(circ, circNum, sizeof circNum);
+  char athBuf[32];  fmt_usd_compact(athUsd, athBuf, sizeof athBuf);
 
-  char l2[160];
-  snprintf(l2, sizeof(l2), "Cap: %s  •  Circ: %s  •  ATH: %s (%dd ago)",
-           capBuf, circBuf, athBuf, athDaysAgo);
+  // Line 2 (SECONDARY accent)
+  char l2[240];
+  snprintf(l2, sizeof(l2),
+           "Cap: #%s %s#  •  Circ: #%s %s / 21,000,000#  •  ATH: #%s %s# (#%s %dd ago#)",
+           g_hex_secondary, capBuf,
+           g_hex_secondary, circNum,
+           g_hex_secondary, athBuf,
+           g_hex_secondary, athDaysAgo);
   lv_label_set_text(midLine2Label, l2);
 }
 
@@ -357,11 +381,14 @@ static void hydrate_metrics_from_cache() {
 
  //CREATE METRICS SCREEN
 
-  lv_obj_t* create_metrics_screen() {
-  lv_obj_t* scr = lv_obj_create(NULL);
-  ui::apply_root_bg(scr);                        // apply new theme background
+lv_obj_t* create_metrics_screen() {
+lv_obj_t* scr = lv_obj_create(NULL);
+ui::apply_root_bg(scr);                        // apply new theme background
 
-  //lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, LV_PART_MAIN);
+
+// pull current theme colors into hex strings for label recolor
+refresh_accent_hex_from_theme();
+
 
 
   // Style Set Up
@@ -858,17 +885,32 @@ lv_obj_set_style_bg_opa(midStrip, LV_OPA_TRANSP, 0);
 
 // Line 1
 midLine1Label = lv_label_create(midStrip);
-lv_obj_set_style_text_color(midLine1Label, lv_color_hex(0xCBD5E1), 0);
-lv_obj_set_style_text_font(midLine1Label, &lv_font_montserrat_12, 0);
+lv_obj_set_style_text_color(midLine1Label, lv_color_hex(0xCBD5E1), 0); // base slate
+lv_obj_set_style_text_font(midLine1Label, &lv_font_montserrat_14, 0);
 lv_label_set_long_mode(midLine1Label, LV_LABEL_LONG_SCROLL_CIRCULAR);
-lv_label_set_text(midLine1Label, "Hashrate: — EH/s  •  Diff: —% (—d)");
+lv_label_set_recolor(midLine1Label, true);
+{
+  char init1[200];
+  snprintf(init1, sizeof(init1),
+           "Hashrate: #%s — EH/s#  •  Difficulty: #%s —%%# (#%s —d#)",
+           g_hex_primary, g_hex_primary, g_hex_primary);
+  lv_label_set_text(midLine1Label, init1);
+}
 
 // Line 2
 midLine2Label = lv_label_create(midStrip);
-lv_obj_set_style_text_color(midLine2Label, lv_color_hex(0xCBD5E1), 0);
-lv_obj_set_style_text_font(midLine2Label, &lv_font_montserrat_12, 0);
+lv_obj_set_style_text_color(midLine2Label, lv_color_hex(0xCBD5E1), 0); // base slate
+lv_obj_set_style_text_font(midLine2Label, &lv_font_montserrat_14, 0);
 lv_label_set_long_mode(midLine2Label, LV_LABEL_LONG_SCROLL_CIRCULAR);
-lv_label_set_text(midLine2Label, "Cap: —  •  Circ: — / 21,000,000  •  ATH: — (—d ago)");
+lv_label_set_recolor(midLine2Label, true);
+{
+  char init2[220];
+  snprintf(init2, sizeof(init2),
+           "Market Cap: #%s —#  •  Circulating Supply: #%s — / 21,000,000#  •  ALL Time High: #%s —# (#%s —d ago#)",
+           g_hex_secondary, g_hex_secondary, g_hex_secondary, g_hex_secondary);
+  lv_label_set_text(midLine2Label, init2);
+}
+
 
 hydrate_metrics_from_cache();
 
