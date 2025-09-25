@@ -31,6 +31,11 @@ lv_obj_t* low24Label  = nullptr;
 lv_obj_t* high24Label = nullptr;
 lv_obj_t* vol24Label  = nullptr;
 lv_obj_t* blkAgeLabel = nullptr;
+// ── Mid-strip (hash/diff/cap/circ/ath) ─────────────────────────────
+lv_obj_t* midStrip      = nullptr;
+lv_obj_t* midLine1Label = nullptr;
+lv_obj_t* midLine2Label = nullptr;
+
 
 // cache last-known block timestamp (UNIX seconds)
 static uint32_t c_block_ts = 0;
@@ -42,7 +47,9 @@ extern lv_obj_t* rightBtn;
 
 // Forward declaration
 static void hydrate_metrics_from_cache();
-
+void ui_update_change_pill(float changePct);
+void ui_update_24h_stats(float lowUsd, float highUsd, float volUsd);
+static void fmt_usd_compact(float v, char* out, size_t outlen);
 
 // --- small helpers ---
 static inline void set_text_if(lv_obj_t* lbl, const String& s) {
@@ -52,6 +59,53 @@ static inline void set_text_if(lv_obj_t* lbl, const String& s) {
 static inline void set_fee_pill(lv_obj_t* lbl, const char* name, int v) {
   if (!lbl) return;
   if (v >= 0) lv_label_set_text_fmt(lbl, "%s %d", name, v);
+}
+
+
+// ── Small helper: int with commas ──────────────────────────────────
+static void fmt_int_commas_ul(unsigned long v, char* out, size_t n) {
+  String s = String(v);
+  for (int i = s.length() - 3; i > 0; i -= 3) {
+    s = s.substring(0, i) + "," + s.substring(i);
+  }
+  strncpy(out, s.c_str(), n);
+  out[n-1] = '\0';
+}
+
+// ── Public: update the mid-strip with real values ──────────────────
+// fromAthPct: negative if price is below ATH (mirrors dashboard behavior)
+void ui_update_mid_metrics(float hashrateEh,
+                           float diffPct,
+                           int   diffDaysAgo,
+                           float marketCapUsd,
+                           float circBtc,
+                           float athUsd,
+                           int   athDaysAgo,
+                           float fromAthPct)
+{
+  if (!midLine1Label || !midLine2Label) return;
+
+  // Line 1: Hashrate + Difficulty (with arrow)
+  char l1[128];
+  const char arrow = (diffPct > 0) ? '▲' : ((diffPct < 0) ? '▼' : '◆');
+  float absPct = diffPct >= 0 ? diffPct : -diffPct;
+  snprintf(l1, sizeof(l1), "Hashrate: %.0f EH/s  •  Diff: %c%.2f%% (%dd)",
+           hashrateEh, arrow, absPct, diffDaysAgo);
+  lv_label_set_text(midLine1Label, l1);
+
+  // Line 2: Market Cap (compact), Circulating, ATH (days ago)
+  char capBuf[32]; fmt_usd_compact(marketCapUsd, capBuf, sizeof capBuf);
+  char circBuf[48]; {
+    unsigned long circ = (circBtc >= 0) ? (unsigned long)(circBtc + 0.5f) : 0;
+    char circNum[24]; fmt_int_commas_ul(circ, circNum, sizeof circNum);
+    snprintf(circBuf, sizeof(circBuf), "%s / 21,000,000", circNum);
+  }
+  char athBuf[32]; fmt_usd_compact(athUsd, athBuf, sizeof athBuf);
+
+  char l2[160];
+  snprintf(l2, sizeof(l2), "Cap: %s  •  Circ: %s  •  ATH: %s (%dd ago)",
+           capBuf, circBuf, athBuf, athDaysAgo);
+  lv_label_set_text(midLine2Label, l2);
 }
 
 
@@ -785,7 +839,50 @@ lv_label_set_text(vol24Label, "Vol 24h: —");
   lv_obj_add_style(rightBtn, &blueStyle, 0);
   lv_obj_add_event_cb(rightBtn, onTouchEvent_metrics_screen, LV_EVENT_CLICKED, NULL);
 
+
+// ── Mid-strip (two lines) centered between Back/Right ─────────────
+midStrip = lv_obj_create(scr);
+lv_obj_remove_style_all(midStrip);
+lv_obj_set_size(midStrip, LV_PCT(70), LV_SIZE_CONTENT);
+
+// keep it above the 24h footer
+const int FOOTER_H          = 160;
+const int FOOTER_BOTTOM_PAD = 30;
+const int MIDSTRIP_MARGIN   = 8;
+lv_obj_align(midStrip, LV_ALIGN_BOTTOM_MID, 0, -(FOOTER_H + FOOTER_BOTTOM_PAD + MIDSTRIP_MARGIN));
+
+lv_obj_set_flex_flow(midStrip, LV_FLEX_FLOW_COLUMN);
+lv_obj_set_style_pad_row(midStrip, 2, 0);
+lv_obj_set_style_bg_opa(midStrip, LV_OPA_TRANSP, 0);
+
+
+// Line 1
+midLine1Label = lv_label_create(midStrip);
+lv_obj_set_style_text_color(midLine1Label, lv_color_hex(0xCBD5E1), 0);
+lv_obj_set_style_text_font(midLine1Label, &lv_font_montserrat_12, 0);
+lv_label_set_long_mode(midLine1Label, LV_LABEL_LONG_SCROLL_CIRCULAR);
+lv_label_set_text(midLine1Label, "Hashrate: — EH/s  •  Diff: —% (—d)");
+
+// Line 2
+midLine2Label = lv_label_create(midStrip);
+lv_obj_set_style_text_color(midLine2Label, lv_color_hex(0xCBD5E1), 0);
+lv_obj_set_style_text_font(midLine2Label, &lv_font_montserrat_12, 0);
+lv_label_set_long_mode(midLine2Label, LV_LABEL_LONG_SCROLL_CIRCULAR);
+lv_label_set_text(midLine2Label, "Cap: —  •  Circ: — / 21,000,000  •  ATH: — (—d ago)");
+
 hydrate_metrics_from_cache();
+
+// TEMP: demo values (remove once wired)
+ui_update_mid_metrics(
+  605.0f,   // hashrate EH/s
+  -1.23f,   // difficulty change %
+  12,       // days since difficulty adjustment
+  1.23e12f, // market cap USD
+  19780000, // circulating BTC
+  69000.0f, // ATH USD
+  650,      // days since ATH
+  -12.5f    // fromAthPct (negative: below ATH)
+);
 
 
   return scr;
