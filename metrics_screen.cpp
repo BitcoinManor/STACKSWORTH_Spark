@@ -47,7 +47,7 @@ static struct {
 // Forward decls (defined later in this file)
 static void repaint_mid_strip();
 static void apply_accent_swap_to_widgets();
-
+static void style_accent_button_like_miner();
 
 
 extern String lastPrice;
@@ -437,6 +437,9 @@ static void apply_accent_swap_to_widgets() {
   // Block card small accents
   if (blocksToCountLabel)  lv_obj_set_style_text_color(blocksToCountLabel,  ACC_PRIMARY(),   0);
   if (solvedByValueLabel)  lv_obj_set_style_text_color(solvedByValueLabel, ACC_SECONDARY(), 0);
+
+  style_accent_button_like_miner();
+
 }
 
 
@@ -998,7 +1001,7 @@ lv_label_set_recolor(midLine2Label, true);
 {
   char init2[220];
   snprintf(init2, sizeof(init2),
-           "Market Cap: #%s —#  •  Circulating Supply: #%s — / 21,000,000#  •  ALL Time High: #%s —# (#%s —d ago#)",
+           "Market Cap: #%s —#  •  Circulating Supply: #%s — / 21,000,000#  •  All Time High: #%s —# (#%s —d ago#)",
            g_hex_secondary, g_hex_secondary, g_hex_secondary, g_hex_secondary);
   lv_label_set_text(midLine2Label, init2);
 }
