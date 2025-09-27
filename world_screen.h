@@ -33,3 +33,6 @@ lv_obj_t* create_world_screen();
 void ui_weather_set_location(const String& city, const String& region, const String& country);
 void ui_weather_set_current(int tempC, const String& condition);
 void ui_weather_set_time(const String& timeStr);
+void ui_weather_set_tz_label(const String& ianaLabel);
+void ui_weather_set_clock_12h(bool use12h);
+void ui_weather_set_posix_tz(const String& tz);
