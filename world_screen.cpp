@@ -44,7 +44,8 @@ void onTouchEvent_world_screen(lv_event_t* e) {
 static lv_obj_t* timeLabel = nullptr;
 static lv_obj_t* locationLabel = nullptr;
 static lv_obj_t* weatherLabel = nullptr;
- 
+static lv_obj_t* dateLabel = nullptr;
+
 // Cached values (used to populate immediately on screen create)
 static String s_time = "--:--";
 static String s_city, s_region, s_country;
