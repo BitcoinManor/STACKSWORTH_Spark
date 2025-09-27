@@ -913,24 +913,52 @@ void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
   if (!wlan_ok) {
     startPortal();  // sets portalModeActive = true and fills g_apName
   }
+
 // --- World/Weather init ---
 load_city_tz_from_prefs();
-setup_tz();
 
-// Try geocoding (once) and show location line immediately if found
+// 1) Start SNTP once (do NOT pass an IANA zone here)
+configTime(0, 0, "pool.ntp.org", "time.nist.gov", "time.google.com");
+
+// 2) Apply timezone from portal value (IANA → POSIX mapping in world_screen.cpp)
+ui_weather_set_tz_label(g_savedTZ);
+
+
+
+// 3) Optional: choose clock style (12h for Calgary UX by default)
+ui_weather_set_clock_12h(true);
+
+// 4) Wait (up to ~10s) for RTC to be valid before first paint
+time_t now = 0; uint32_t t0 = millis();
+do { now = time(nullptr); if (now > 1600000000) break; delay(200); } while (millis() - t0 < 10000);
+
+// Debug: confirm wall time and zone
+{
+  time_t t = time(nullptr);
+  struct tm lt; localtime_r(&t, &lt);
+  char buf[64];
+  strftime(buf, sizeof(buf), "%c %Z (UTC%z)", &lt);
+  Serial.printf("Local time check: %s  | TZ label: %s\n", buf, g_savedTZ.c_str());
+}
+
+
+
+// 5) Geocode once (if needed) and show location
 String c, r, k;
 if (geocode_city(g_savedCity, g_lat, g_lon, c, r, k)) {
   ui_weather_set_location(c, r, k);
 }
 
-// Fetch current weather once on boot
+// 6) Fetch current weather once on boot
 int tC = 0; String cond;
 if (fetch_weather(g_lat, g_lon, tC, cond)) {
   ui_weather_set_current(tC, cond);
 }
 
-// Set initial time string
-ui_weather_set_time(now_time_12h());
+// 7) First clock paint happens inside the world screen; this call is harmless but optional.
+//    (ui_weather_set_time(...) now just calls render_time_from_rtc())
+ui_weather_set_time(String());
+
 
 
 
