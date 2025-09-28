@@ -7,6 +7,7 @@
 #include "screen_manager.h"
 #include "world_screen.h"
 #include <Preferences.h> 
+#include "ui_theme.h"
 
 //External shared Objects
 extern lv_obj_t* backBtn;
@@ -75,6 +76,84 @@ static void add_clock_format_setting(lv_obj_t* parent) {
   lv_obj_add_event_cb(g_clockSwitch, clock_switch_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 }
 
+
+// ----- Currency setting (2nd-line fiat for CAD/SATS/$1) -----
+static lv_obj_t* g_currencyDrop = nullptr;
+
+static int currency_index_from_iso(const String& iso) {
+  if (iso.equalsIgnoreCase("CAD")) return 0;
+  if (iso.equalsIgnoreCase("USD")) return 1;
+  if (iso.equalsIgnoreCase("EUR")) return 2;
+  if (iso.equalsIgnoreCase("GBP")) return 3;
+  if (iso.equalsIgnoreCase("JPY")) return 4;
+  if (iso.equalsIgnoreCase("AUD")) return 5;
+  return 0; // default CAD
+}
+
+static String currency_iso_from_index(int idx) {
+  switch (idx) {
+    case 0: return "CAD";
+    case 1: return "USD";
+    case 2: return "EUR";
+    case 3: return "GBP";
+    case 4: return "JPY";
+    case 5: return "AUD";
+    default: return "CAD";
+  }
+}
+
+static void currency_drop_cb(lv_event_t* e) {
+  lv_obj_t* dd = lv_event_get_target(e);
+  uint16_t sel = lv_dropdown_get_selected(dd);
+  String iso = currency_iso_from_index((int)sel);
+
+  // Persist preference
+  Preferences prefs;
+  prefs.begin("cfg", false);
+  prefs.putString("fiat", iso);
+  prefs.end();
+
+  // Tell the metrics screen to repaint its “CAD line” + “SATS / 1 <fiat>” line
+  extern void ui_price_set_preferred_fiat(const String& iso);  // declared in metrics_screen.h
+  ui_price_set_preferred_fiat(iso);
+}
+
+static void add_currency_setting(lv_obj_t* parent) {
+  if (!parent) parent = lv_scr_act();
+
+  // Load current
+  Preferences prefs;
+  prefs.begin("cfg", true);
+  String iso = prefs.getString("fiat", "CAD");
+  prefs.end();
+
+  // Row
+  lv_obj_t* row = lv_obj_create(parent);
+  lv_obj_remove_style_all(row);
+  lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+  lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(row,
+                        LV_FLEX_ALIGN_SPACE_BETWEEN,
+                        LV_FLEX_ALIGN_CENTER,
+                        LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_style_pad_hor(row, 8, 0);
+  lv_obj_set_style_pad_ver(row, 4, 0);
+  lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+
+  // Label
+  lv_obj_t* lbl = lv_label_create(row);
+  lv_label_set_text(lbl, "Second currency");
+
+  // Dropdown
+  g_currencyDrop = lv_dropdown_create(row);
+  // Options order matches currency_index_from_iso()
+  lv_dropdown_set_options_static(g_currencyDrop, "CAD\nUSD\nEUR\nGBP\nJPY\nAUD");
+  lv_dropdown_set_selected(g_currencyDrop, currency_index_from_iso(iso));
+  lv_obj_add_event_cb(g_currencyDrop, currency_drop_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+}
+
+
+
 // Handle button press events
 void onTouchEvent_settings_screen(lv_event_t* e) {
   lv_obj_t* target = lv_event_get_target(e);
@@ -126,7 +205,45 @@ lv_obj_t* create_settings_screen() {
   lv_obj_align(priceheightLabel, LV_ALIGN_TOP_RIGHT, -25, 10);
 
 
-  add_clock_format_setting(scr);
+  lv_obj_t* widget1 = ui::make_card(scr);
+  lv_obj_set_size(widget1, 640, 400);
+// Center the card on the screen
+  lv_obj_center(widget1);
+
+// Card layout: vertical stack, centered content
+  lv_obj_set_flex_flow(widget1, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(widget1,
+    LV_FLEX_ALIGN_START,   // main axis (top to bottom)
+    LV_FLEX_ALIGN_CENTER,  // cross axis (center children)
+    LV_FLEX_ALIGN_CENTER   // track cross placement
+  );
+  lv_obj_set_style_pad_all(widget1, 20, 0);
+  lv_obj_set_style_pad_row(widget1, 12, 0);
+
+// ========== Row 1: Title  ==========
+lv_obj_t* row1 = lv_obj_create(widget1);
+lv_obj_remove_style_all(row1);
+lv_obj_set_size(row1, LV_PCT(100), LV_SIZE_CONTENT);
+lv_obj_set_flex_flow(row1, LV_FLEX_FLOW_ROW);
+lv_obj_set_flex_align(row1, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+lv_obj_set_style_bg_opa(row1, LV_OPA_TRANSP, 0);
+
+// Title 
+lv_obj_t* clockFormatTitle = lv_label_create(row1);
+lv_obj_add_style(clockFormatTitle, &ui::st_title, 0);
+lv_label_set_text(clockFormatTitle, "Clock Format");
+lv_obj_set_style_text_font(clockFormatTitle, &lv_font_montserrat_16, 0);
+
+
+  // Section title inside the card
+lv_obj_t* prefsTitle = lv_label_create(widget1);
+lv_obj_add_style(prefsTitle, &ui::st_title, 0);
+lv_obj_set_style_text_font(prefsTitle, &lv_font_montserrat_16, 0);
+lv_label_set_text(prefsTitle, "Preferences");
+
+// Add settings rows into the card (not on the root)
+add_clock_format_setting(widget1);
+add_currency_setting(widget1);
 
 
 
