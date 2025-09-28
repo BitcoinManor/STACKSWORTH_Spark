@@ -55,8 +55,10 @@ void ui_cache_price_aux(const String& cadLine,
 // Update the 24h low / high / volume pills (USD)
 void ui_update_24h_stats(float lowUsd, float highUsd, float volUsd);
 
+
 // Block-age pill updater (pass UNIX seconds of the latest block)
 void ui_update_block_age_from_unix(uint32_t block_ts);
 void ui_tick_block_age();   // cheap re-render that uses the cached timestamp
 
+void ui_price_set_preferred_fiat(const String& iso);
                         
