@@ -8,8 +8,10 @@
 #include "ui_theme.h"
 #include <time.h>
 #include "data_store.h"
+#include <Preferences.h>
 
-// ───────────────── Accent swap scaffold (top of file) ─────────────────
+
+// ───────────────── Accent swap scaffold─────────────────
 static bool g_swapAccents = false; // false: normal mapping, true: swapped
 
 // Resolve current accent colors (honors swap flag)
@@ -43,6 +45,24 @@ static struct {
   int   athDaysAgo = 0;
   bool  valid = false;
 } g_midLast;
+
+
+
+static String s_prefFiat = "CAD";   // default
+
+// quick symbol helper (optional)
+static const char* symbol_for(const String& iso) {
+  if (iso.equalsIgnoreCase("USD")) return "$";
+  if (iso.equalsIgnoreCase("CAD")) return "$";
+  if (iso.equalsIgnoreCase("EUR")) return "€";
+  if (iso.equalsIgnoreCase("GBP")) return "£";
+  if (iso.equalsIgnoreCase("JPY")) return "¥";
+  if (iso.equalsIgnoreCase("AUD")) return "$";
+  return "";
+}
+
+
+
 
 // Forward decls (defined later in this file)
 static void repaint_mid_strip();
@@ -194,7 +214,57 @@ static int    c_feeLow  = -1, c_feeMed = -1, c_feeHigh = -1;
 static float  c_changePct = 0.0f;
 static bool   c_changePct_set = false;   // track validity without isnan
 
+// repaint just the two “second currency” lines using whatever cache we have
+static void repaint_second_currency_lines() {
+  // CAD price line label (we’ll reuse this label for the selected fiat)
+  if (priceCadLabel) {
+    if (s_prefFiat.equalsIgnoreCase("CAD")) {
+      // use your cached CAD pretty line if present
+      if (c_priceCad.length()) lv_label_set_text(priceCadLabel, c_priceCad.c_str());
+      else lv_label_set_text(priceCadLabel, "CAD: —");
+    } else if (s_prefFiat.equalsIgnoreCase("USD")) {
+      // render from Cache::price.usdPretty if available
+      if (Cache::price.usdPretty.length()) {
+        String line = "USD " + Cache::price.usdPretty;
+        lv_label_set_text(priceCadLabel, line.c_str());
+      } else {
+        lv_label_set_text(priceCadLabel, "USD: —");
+      }
+    } else {
+      // other fiats to be wired later with real rates
+      String ph = s_prefFiat + ": —";
+      lv_label_set_text(priceCadLabel, ph.c_str());
+    }
+  }
 
+  // SATS / 1 <fiat> line — for now we show cached ones if they exist, else placeholder
+  if (satsCadLabel) {
+    if (s_prefFiat.equalsIgnoreCase("CAD")) {
+      if (c_satsCad.length()) lv_label_set_text(satsCadLabel, c_satsCad.c_str());
+      else lv_label_set_text(satsCadLabel, "… SATS / 1 CAD");
+    } else if (s_prefFiat.equalsIgnoreCase("USD")) {
+      if (c_satsUsd.length()) lv_label_set_text(satsCadLabel, c_satsUsd.c_str());
+      else lv_label_set_text(satsCadLabel, "… SATS / 1 USD");
+    } else {
+      // Future: compute from price + FX. Placeholder for now.
+      String line = String("… SATS / 1 ") + s_prefFiat;
+      lv_label_set_text(satsCadLabel, line.c_str());
+    }
+  }
+}
+
+// Public: called from settings screen and also at boot
+void ui_price_set_preferred_fiat(const String& iso) {
+  s_prefFiat = iso;
+
+  // Persist (so boot uses the last choice)
+  Preferences prefs;
+  prefs.begin("cfg", false);
+  prefs.putString("fiat", s_prefFiat);
+  prefs.end();
+
+  repaint_second_currency_lines();
+}
 
 // --- Fee tier badges (LOW / MED / HIGH) ---
 lv_obj_t* feeLowLabel  = nullptr;
@@ -684,6 +754,15 @@ lv_chart_refresh(priceChartMini);
   lv_obj_add_style(satsCadLabel, &ui::st_accent_secondary, 0);
   lv_obj_set_style_text_font(satsCadLabel, &lv_font_montserrat_14, 0);
   lv_label_set_text(satsCadLabel, c_satsCad.length() ? c_satsCad.c_str() : "… SATS / $1 CAD");
+
+// Initialize second currency preference from prefs and paint once
+{
+  Preferences prefs;
+  prefs.begin("cfg", true);
+  String iso = prefs.getString("fiat", "CAD");
+  prefs.end();
+  ui_price_set_preferred_fiat(iso);
+}
 
 
 
