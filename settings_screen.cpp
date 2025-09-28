@@ -5,7 +5,8 @@
 #include <Arduino.h>
 #include "settings_screen.h"
 #include "screen_manager.h"
-
+#include "world_screen.h"
+#include <Preferences.h> 
 
 //External shared Objects
 extern lv_obj_t* backBtn;
@@ -22,6 +23,57 @@ extern lv_style_t blueStyle;
 
 //bool isRightOn = false;
 
+
+
+static lv_obj_t* g_clockSwitch = nullptr;
+
+static void clock_switch_cb(lv_event_t* e) {
+  lv_obj_t* sw = lv_event_get_target(e);
+  if (!sw) return;
+  bool use12h = lv_obj_has_state(sw, LV_STATE_CHECKED);
+
+  // Persist
+  Preferences prefs;
+  prefs.begin("cfg", false);
+  prefs.putBool("clock12h", use12h);
+  prefs.end();
+
+  // Apply immediately (updates world_screen time label)
+  ui_weather_set_clock_12h(use12h);
+}
+
+// Add a "Clock format (12h)" row with a switch into the given parent container.
+static void add_clock_format_setting(lv_obj_t* parent) {
+  if (!parent) parent = lv_scr_act();
+
+  // Read current pref (default true → 12h)
+  Preferences prefs;
+  prefs.begin("cfg", true);
+  bool use12h = prefs.getBool("clock12h", true);
+  prefs.end();
+
+  // Row container
+  lv_obj_t* row = lv_obj_create(parent);
+  lv_obj_remove_style_all(row);
+  lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+  lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(row,
+                        LV_FLEX_ALIGN_SPACE_BETWEEN,
+                        LV_FLEX_ALIGN_CENTER,
+                        LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_style_pad_hor(row, 8, 0);
+  lv_obj_set_style_pad_ver(row, 4, 0);
+  lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+
+  // Label
+  lv_obj_t* lbl = lv_label_create(row);
+  lv_label_set_text(lbl, "Clock format (12h)");
+
+  // Switch
+  g_clockSwitch = lv_switch_create(row);
+  if (use12h) lv_obj_add_state(g_clockSwitch, LV_STATE_CHECKED);
+  lv_obj_add_event_cb(g_clockSwitch, clock_switch_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+}
 
 // Handle button press events
 void onTouchEvent_settings_screen(lv_event_t* e) {
@@ -48,8 +100,7 @@ void onTouchEvent_settings_screen(lv_event_t* e) {
 lv_obj_t* create_settings_screen() {
   lv_obj_t* scr = lv_obj_create(NULL);
   lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0); //Black
-  //lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
-  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0); 
 
 
 
@@ -75,7 +126,7 @@ lv_obj_t* create_settings_screen() {
   lv_obj_align(priceheightLabel, LV_ALIGN_TOP_RIGHT, -25, 10);
 
 
-  
+  add_clock_format_setting(scr);
 
 
 
