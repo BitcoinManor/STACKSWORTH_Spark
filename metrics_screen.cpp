@@ -635,7 +635,7 @@ refresh_accent_hex_from_theme();
 
 
   lv_obj_t* inf = lv_label_create(scr);
-  lv_label_set_text(inf, "SPARK v0.0.3");
+  lv_label_set_text(inf, "SPARK v0.0.4");
   lv_obj_set_style_text_color(inf, lv_color_hex(0xFFFFFF), 0);
   lv_obj_set_style_text_font(inf, &lv_font_montserrat_16, 0);
   lv_obj_align(inf, LV_ALIGN_BOTTOM_RIGHT, -60, 0);
@@ -1043,7 +1043,7 @@ lv_label_set_text(vol24Label, "Vol 24h: —");
 
 // ───────────────────────── Footer: Block Interval Visualizer ─────────────────────────
 intervalCard = ui::make_card(scr);
-lv_obj_set_size(intervalCard, 680, 180);
+lv_obj_set_size(intervalCard, 680, 160);
 lv_obj_align(intervalCard, LV_ALIGN_BOTTOM_MID, 0, -30);
 lv_obj_set_flex_flow(intervalCard, LV_FLEX_FLOW_COLUMN);
 lv_obj_set_style_pad_all(intervalCard, 12, 0);
