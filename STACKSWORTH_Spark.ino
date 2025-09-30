@@ -2,7 +2,7 @@
  *  STACKSWORTH Spark – "mainScreen" UI
  *  --------------------------------------------------
  *  Project     : STACKSWORTH Spark Firmware
- *  Version     : v0.0.3
+ *  Version     : v0.0.4
  *  Device      : ESP32-S3 Waveshare 7" Touchscreen (800x480)
  *  Description : Modular Bitcoin Dashboard UI using LVGL
  *  Designer    : Bitcoin Manor 🟧
@@ -39,12 +39,28 @@
 #include "esp_system.h"
 #include "esp_wifi.h"   // for esp_read_mac
 #include "data_store.h"
+#include <math.h>
+
 
 
 
 void ui_update_blocks_to_million(long height);
 
 void ui_update_fee_badges_lmh(int low, int med, int high);
+
+// Forward decls from metrics_screen.cpp so the .ino can call them
+void ui_update_mid_metrics(float hashrateEh,
+                           float diffPct,
+                           int   diffDaysAgo,
+                           float marketCapUsd,
+                           float circBtc,
+                           float athUsd,
+                           int   athDaysAgo,
+                           float fromAthPct);
+
+void ui_update_block_intervals(const uint8_t* minutes, int count);
+
+
 
 
 // ==== Captive portal globals & helpers ====
@@ -371,6 +387,29 @@ static void format_price_usd(float value, char* out, size_t outlen, const char* 
   if (cents >= 100) { whole++; cents -= 100; }
   String s = String(prefix) + fmt_with_commas(whole) + "." + (cents < 10 ? "0" : "") + String(cents);
   s.toCharArray(out, outlen);
+}
+
+
+// ---- Mid-strip cache so we only paint when all parts are ready ----
+static float g_hashrateEh = NAN;
+static float g_diffPct    = NAN;
+static int   g_diffDays   = -1;
+
+static float g_mcapUsd    = NAN;
+static float g_circBtc    = NAN;
+static float g_athUsd     = NAN;
+static int   g_athDays    = -1;
+
+static inline bool mid_ready() {
+  return isfinite(g_hashrateEh) && isfinite(g_diffPct) && g_diffDays >= 0 &&
+         isfinite(g_mcapUsd)   && isfinite(g_circBtc) && isfinite(g_athUsd) && g_athDays >= 0;
+}
+
+static void paint_mid_if_ready() {
+  if (mid_ready()) {
+    // last arg fromAthPct is unused in your UI for now
+    ui_update_mid_metrics(g_hashrateEh, g_diffPct, g_diffDays, g_mcapUsd, g_circBtc, g_athUsd, g_athDays, 0.0f);
+  }
 }
 
 
@@ -789,6 +828,156 @@ http.end();
 }
 
 
+static void fetch_hashrate_and_diff() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  HTTPClient http;
+
+  // --- Hashrate (EH/s) from 3-day series; take latest point ---
+  double latestEH = NAN;
+  {
+    http.begin("https://mempool.space/api/v1/mining/hashrate/3d");
+    int code = http.GET();
+    if (code == 200) {
+      String body = http.getString();
+      DynamicJsonDocument doc(8192);
+      if (deserializeJson(doc, body) == DeserializationError::Ok && doc.is<JsonArray>()) {
+        JsonArray arr = doc.as<JsonArray>();
+        if (!arr.isNull() && arr.size() > 0) {
+          JsonObject last = arr[arr.size() - 1];
+          // endpoint uses avgHashrate (H/s); normalize to EH/s
+          double h = last["avgHashrate"] | last["avgHashRate"] | last["hashrate"] | 0.0;
+          latestEH = h / 1e18;
+        }
+      }
+    }
+    http.end();
+  }
+
+  // --- Difficulty epoch info ---
+  double diffPct = NAN;
+  int    daysAgo = -1;
+  {
+    http.begin("https://mempool.space/api/v1/difficulty-adjustment");
+    int code = http.GET();
+    if (code == 200) {
+      String body = http.getString();
+      DynamicJsonDocument doc(4096);
+      if (deserializeJson(doc, body) == DeserializationError::Ok && doc.is<JsonObject>()) {
+        JsonObject o = doc.as<JsonObject>();
+        diffPct = o["difficultyChange"] | 0.0;     // % change this epoch (running estimate)
+        int remainingBlocks = o["remainingBlocks"] | -1;
+        double timeAvg = o["timeAvg"] | 600.0;     // avg sec per block this epoch
+        if (remainingBlocks >= 0) {
+          int mined = 2016 - remainingBlocks;
+          daysAgo = (int)round((mined * timeAvg) / 86400.0);
+        }
+      }
+    }
+    http.end();
+  }
+
+  if (isfinite(latestEH)) g_hashrateEh = (float)latestEH;
+  if (isfinite(diffPct))  g_diffPct    = (float)diffPct;
+  if (daysAgo >= 0)       g_diffDays   = daysAgo;
+
+  paint_mid_if_ready();
+}
+
+
+
+static time_t parse_iso_ymd_utc(const String& iso) {
+  // Expect "YYYY-MM-DD..." (CoinGecko ath_date)
+  if (iso.length() < 10) return 0;
+  int y = iso.substring(0,4).toInt();
+  int m = iso.substring(5,7).toInt();
+  int d = iso.substring(8,10).toInt();
+  struct tm t = {0};
+  t.tm_year = y - 1900; t.tm_mon = m - 1; t.tm_mday = d;
+  // mktime uses local TZ; for day differences that’s fine.
+  return mktime(&t);
+}
+
+static void fetch_market_meta() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  HTTPClient http;
+  http.begin("https://api.coingecko.com/api/v3/coins/bitcoin?localization=false&market_data=true&sparkline=false");
+  int code = http.GET();
+  if (code == 200) {
+    String body = http.getString();
+    DynamicJsonDocument doc(16384);
+    if (deserializeJson(doc, body) == DeserializationError::Ok) {
+      JsonObject md = doc["market_data"];
+      double mcap = md["market_cap"]["usd"] | 0.0;
+      double circ = md["circulating_supply"] | 0.0;
+      double ath  = md["ath"]["usd"] | 0.0;
+      const char* athDate = md["ath_date"]["usd"] | "";
+      if (mcap > 0) g_mcapUsd = (float)mcap;
+      if (circ > 0) g_circBtc = (float)circ;
+      if (ath  > 0) g_athUsd  = (float)ath;
+      if (athDate && *athDate) {
+        time_t then = parse_iso_ymd_utc(String(athDate));
+        time_t now  = time(nullptr);
+        if (then > 0 && now > then) g_athDays = (int)((now - then) / 86400);
+      }
+    }
+  }
+  http.end();
+
+  paint_mid_if_ready();
+}
+
+
+
+static void fetch_block_intervals_footer() {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  HTTPClient http;
+  http.begin("https://mempool.space/api/blocks");
+  int code = http.GET();
+  if (code != 200) { http.end(); return; }
+  String body = http.getString();
+  http.end();
+
+  DynamicJsonDocument doc(12288);
+  if (deserializeJson(doc, body) != DeserializationError::Ok || !doc.is<JsonArray>()) return;
+
+  JsonArray arr = doc.as<JsonArray>();
+
+  // Build minute gaps between consecutive blocks
+  const int MAXN = 12;
+  uint8_t mins[MAXN];  // UI expects uint8_t
+  int count = 0;
+
+  // Collect diffs (API is newest→older); store in a small temp buffer
+  int tmp[32];
+  int tcount = 0;
+  for (size_t i = 0; i + 1 < arr.size() && tcount < 32; ++i) {
+    uint32_t t0 = arr[i]["timestamp"] | arr[i]["time"] | 0;
+    uint32_t t1 = arr[i+1]["timestamp"] | arr[i+1]["time"] | 0;
+    if (!t0 || !t1) continue;
+
+    long m = lround(fabs((double)t0 - (double)t1) / 60.0);
+    if (m < 0)   m = 0;
+    if (m > 255) m = 255;     // clamp for uint8_t
+
+    tmp[tcount++] = (int)m;
+  }
+
+  // Take last 12, reversed to oldest→newest (what your UI wants)
+  for (int i = tcount - 1; i >= 0 && count < MAXN; --i) {
+    mins[count++] = (uint8_t)tmp[i];
+  }
+
+  if (count > 0) {
+    ui_update_block_intervals(mins, count);
+  }
+}
+
+
+
+
+
+
 
 //Bitcoin Chart
 void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
@@ -1047,6 +1236,15 @@ ui_weather_set_time(String());
      lastUpdate = millis();
    }
    //delay(1000);
+
+static unsigned long t_hash = 0, t_blocks = 0, t_meta = 0;
+unsigned long nowMs = millis();
+
+if (nowMs - t_hash   > 30000UL) { fetch_hashrate_and_diff();   t_hash = nowMs; }
+if (nowMs - t_blocks > 30000UL) { fetch_block_intervals_footer(); t_blocks = nowMs; }
+if (nowMs - t_meta   > 120000UL){ fetch_market_meta();          t_meta = nowMs; }
+
+
 
  // Adaptive time refresh: faster (5s) until NTP is valid, then 60s
 static unsigned long t1 = 0;
