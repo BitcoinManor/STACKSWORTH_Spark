@@ -1,5 +1,5 @@
 // STACKSWORTH_metrics_screen.h
-// SPARKv0.02
+// SPARKv0.0.4
 
 
 #pragma once
@@ -61,4 +61,8 @@ void ui_update_block_age_from_unix(uint32_t block_ts);
 void ui_tick_block_age();   // cheap re-render that uses the cached timestamp
 
 void ui_price_set_preferred_fiat(const String& iso);
+
+
+//Block Interval Visualizer
+void ui_update_block_intervals(const uint8_t* minutes, int count);
                         
