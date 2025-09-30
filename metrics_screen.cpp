@@ -1,6 +1,6 @@
 
 // STACKSWORTH_Spark metrics_screen.cpp
-// SPARKv0.0.3
+// SPARKv0.0.4
 
 #include <Arduino.h>
 #include "metrics_screen.h"
@@ -537,6 +537,24 @@ static void style_accent_button_like_miner() {
 }
 
 
+// ── Block Interval Visualizer (footer) ────────────────────────────
+static lv_obj_t* intervalCard   = nullptr;
+static lv_obj_t* intervalChart  = nullptr;
+static lv_chart_series_t* intervalSeries = nullptr;
+
+// Update bars from an array of minutes (oldest→newest). Values clamped to 0..60.
+void ui_update_block_intervals(const uint8_t* minutes, int count) {
+  if (!intervalChart || !intervalSeries || !minutes) return;
+  const int n = lv_chart_get_point_count(intervalChart);
+  for (int i = 0; i < n; ++i) {
+    // right-align latest values into the chart window
+    const int src = count - n + i;
+    int v = (src >= 0 && src < count) ? minutes[src] : 0;
+    if (v < 0) v = 0; else if (v > 60) v = 60;
+    lv_chart_set_value_by_id(intervalChart, intervalSeries, i, (lv_coord_t)v);
+  }
+  lv_chart_refresh(intervalChart);
+}
 
 
 
@@ -942,7 +960,7 @@ if (c_feeLow >= 0 && c_feeMed >= 0 && c_feeHigh >= 0) {
   
 
 
-
+/*
 // ───────────────────────── Footer: 24H Price Card (themed) ─────────────────────────
 lv_obj_t* footer = ui::make_card(scr);
 lv_obj_set_size(footer, 680, 160);
@@ -1019,6 +1037,69 @@ lv_label_set_text(high24Label, "High 24h: —");
 vol24Label = lv_label_create(statsRow);
 lv_obj_add_style(vol24Label, &st_pill_outline_slate, 0);
 lv_label_set_text(vol24Label, "Vol 24h: —");
+
+*/
+
+
+// ───────────────────────── Footer: Block Interval Visualizer ─────────────────────────
+intervalCard = ui::make_card(scr);
+lv_obj_set_size(intervalCard, 680, 180);
+lv_obj_align(intervalCard, LV_ALIGN_BOTTOM_MID, 0, -30);
+lv_obj_set_flex_flow(intervalCard, LV_FLEX_FLOW_COLUMN);
+lv_obj_set_style_pad_all(intervalCard, 12, 0);
+lv_obj_set_style_pad_row(intervalCard, 6, 0);
+
+// Row 1: title + small pill
+lv_obj_t* ivTitle = lv_obj_create(intervalCard);
+lv_obj_remove_style_all(ivTitle);
+lv_obj_set_size(ivTitle, LV_PCT(100), LV_SIZE_CONTENT);
+lv_obj_set_flex_flow(ivTitle, LV_FLEX_FLOW_ROW);
+lv_obj_set_flex_align(ivTitle, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+lv_obj_t* ivLbl = lv_label_create(ivTitle);
+lv_obj_add_style(ivLbl, &ui::st_title, 0);
+lv_obj_set_style_text_font(ivLbl, &lv_font_montserrat_14, 0);
+lv_label_set_text(ivLbl, "Block Interval Visualizer");   // matches dashboard footer title
+
+// outline pill: "target 10min"
+lv_obj_t* targetPill = lv_label_create(ivTitle);
+lv_obj_set_style_radius(targetPill, 999, 0);
+lv_obj_set_style_bg_opa(targetPill, LV_OPA_TRANSP, 0);
+lv_obj_set_style_border_width(targetPill, 1, 0);
+lv_obj_set_style_border_color(targetPill, lv_color_hex(0x243142), 0);
+lv_obj_set_style_text_color(targetPill, lv_color_hex(0xCBD5E1), 0);
+lv_obj_set_style_pad_hor(targetPill, 10, 0);
+lv_obj_set_style_pad_ver(targetPill, 4, 0);
+lv_obj_set_style_text_font(targetPill, &lv_font_montserrat_12, 0);
+lv_label_set_text(targetPill, "target 10min");
+
+// Chart: BAR type, 12 columns, 0..60 minutes
+intervalChart = lv_chart_create(intervalCard);
+lv_obj_set_size(intervalChart, 640, 110);
+lv_obj_set_style_bg_opa(intervalChart, LV_OPA_TRANSP, 0);
+lv_obj_set_style_border_width(intervalChart, 0, 0);
+lv_chart_set_type(intervalChart, LV_CHART_TYPE_BAR);
+lv_chart_set_point_count(intervalChart, 12);
+lv_chart_set_div_line_count(intervalChart, 0, 0);
+lv_chart_set_update_mode(intervalChart, LV_CHART_UPDATE_MODE_SHIFT);
+lv_chart_set_range(intervalChart, LV_CHART_AXIS_PRIMARY_Y, 0, 60);
+
+// slimmer spacing between bars
+lv_obj_set_style_pad_hor(intervalChart, 2, 0);
+lv_obj_set_style_pad_inner(intervalChart, 4, 0);
+
+// bars use the SECONDARY accent (glowy cyan in your theme)
+intervalSeries = lv_chart_add_series(intervalChart, ACC_SECONDARY(), LV_CHART_AXIS_PRIMARY_Y);
+
+// seed demo values (you’ll wire live data in next step)
+static const uint8_t kDemoIntervals[12] = { 9, 12, 7, 8, 11, 4, 16, 10, 6, 14, 9, 8 };
+ui_update_block_intervals(kDemoIntervals, 12);
+
+// small descriptive line (like your HTML)
+lv_obj_t* ivSub = lv_label_create(intervalCard);
+lv_obj_set_style_text_color(ivSub, lv_color_hex(0x9AA0A6), 0);
+lv_obj_set_style_text_font(ivSub, &lv_font_montserrat_12, 0);
+lv_label_set_text(ivSub, "Each column = minutes between blocks; target = 10m.");
 
 
 
