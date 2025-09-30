@@ -1084,9 +1084,13 @@ lv_chart_set_div_line_count(intervalChart, 0, 0);
 lv_chart_set_update_mode(intervalChart, LV_CHART_UPDATE_MODE_SHIFT);
 lv_chart_set_range(intervalChart, LV_CHART_AXIS_PRIMARY_Y, 0, 60);
 
-// slimmer spacing between bars
-lv_obj_set_style_pad_hor(intervalChart, 2, 0);
-lv_obj_set_style_pad_inner(intervalChart, 4, 0);
+// Outer padding so bars don't touch the card edges
+lv_obj_set_style_pad_left(intervalChart, 6, 0);
+lv_obj_set_style_pad_right(intervalChart, 6, 0);
+
+// Bar thickness (controls perceived gap between bars)
+lv_obj_set_style_size(intervalChart, 10, LV_PART_ITEMS);
+
 
 // bars use the SECONDARY accent (glowy cyan in your theme)
 intervalSeries = lv_chart_add_series(intervalChart, ACC_SECONDARY(), LV_CHART_AXIS_PRIMARY_Y);
