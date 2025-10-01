@@ -65,4 +65,4 @@ void ui_price_set_preferred_fiat(const String& iso);
 
 //Block Interval Visualizer
 void ui_update_block_intervals(const uint8_t* minutes, int count);
-                        
+void ui_update_block_labels(const uint32_t* heights, int count);                        
