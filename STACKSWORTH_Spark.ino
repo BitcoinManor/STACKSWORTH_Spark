@@ -59,6 +59,8 @@ void ui_update_mid_metrics(float hashrateEh,
                            float fromAthPct);
 
 void ui_update_block_intervals(const uint8_t* minutes, int count);
+void ui_update_block_labels(const uint32_t* heights, int count);
+
 
 
 
@@ -940,36 +942,43 @@ static void fetch_block_intervals_footer() {
 
   DynamicJsonDocument doc(12288);
   if (deserializeJson(doc, body) != DeserializationError::Ok || !doc.is<JsonArray>()) return;
-
   JsonArray arr = doc.as<JsonArray>();
 
-  // Build minute gaps between consecutive blocks
-  const int MAXN = 12;
-  uint8_t mins[MAXN];  // UI expects uint8_t
-  int count = 0;
-
-  // Collect diffs (API is newest→older); store in a small temp buffer
-  int tmp[32];
+  // Compute minute gaps (newest→older), keep up to 32 in temp buffers
+  int      tmpMins[32];
+  uint32_t tmpHeights[32];
   int tcount = 0;
+
   for (size_t i = 0; i + 1 < arr.size() && tcount < 32; ++i) {
-    uint32_t t0 = arr[i]["timestamp"] | arr[i]["time"] | 0;
-    uint32_t t1 = arr[i+1]["timestamp"] | arr[i+1]["time"] | 0;
+    uint32_t t0 = arr[i]["timestamp"]   | arr[i]["time"] | 0;   // newer
+    uint32_t t1 = arr[i+1]["timestamp"] | arr[i+1]["time"] | 0; // older
     if (!t0 || !t1) continue;
 
     long m = lround(fabs((double)t0 - (double)t1) / 60.0);
     if (m < 0)   m = 0;
-    if (m > 255) m = 255;     // clamp for uint8_t
+    if (m > 255) m = 255;
 
-    tmp[tcount++] = (int)m;
+    tmpMins[tcount]    = (int)m;
+    // label each bar with the **older** block’s height (under that gap)
+    tmpHeights[tcount] = (uint32_t)(arr[i+1]["height"] | 0);
+    ++tcount;
   }
 
-  // Take last 12, reversed to oldest→newest (what your UI wants)
+  // Oldest→newest into the 12 visible slots
+  const int MAXN = 12;
+  uint8_t  mins[MAXN];
+  uint32_t heights[MAXN];
+  int count = 0;
+
   for (int i = tcount - 1; i >= 0 && count < MAXN; --i) {
-    mins[count++] = (uint8_t)tmp[i];
+    mins[count]    = (uint8_t)tmpMins[i];
+    heights[count] = tmpHeights[i];
+    ++count;
   }
 
   if (count > 0) {
     ui_update_block_intervals(mins, count);
+    ui_update_block_labels(heights, count);
   }
 }
 
