@@ -9,6 +9,8 @@
 #include <time.h>
 #include "data_store.h"
 #include <Preferences.h>
+#include <math.h>
+
 
 
 // ───────────────── Accent swap scaffold─────────────────
@@ -541,6 +543,8 @@ static void style_accent_button_like_miner() {
 static lv_obj_t* intervalCard   = nullptr;
 static lv_obj_t* intervalChart  = nullptr;
 static lv_chart_series_t* intervalSeries = nullptr;
+static lv_obj_t*   intervalLabelRow = nullptr;
+static lv_obj_t*   blockNumLabels[12] = {nullptr};
 
 // Update bars from an array of minutes (oldest→newest). Values clamped to 0..60.
 void ui_update_block_intervals(const uint8_t* minutes, int count) {
@@ -550,9 +554,77 @@ void ui_update_block_intervals(const uint8_t* minutes, int count) {
     // right-align latest values into the chart window
     const int src = count - n + i;
     int v = (src >= 0 && src < count) ? minutes[src] : 0;
-    if (v < 0) v = 0; else if (v > 60) v = 60;
+    const int MAXY = 25;  // clamp to 0..25 minutes
+    if (v < 0) v = 0; else if (v > MAXY) v = MAXY;
     lv_chart_set_value_by_id(intervalChart, intervalSeries, i, (lv_coord_t)v);
   }
+  lv_chart_refresh(intervalChart);
+}
+
+// Public: update the 12 block-number labels under each bar (oldest→newest)
+void ui_update_block_labels(const uint32_t* heights, int count) {
+  if (!intervalLabelRow || !heights) return;
+
+  // Right-align into 12 slots (like the bars)
+  for (int i = 0; i < 12; ++i) {
+    int src = count - 12 + i;
+    if (src >= 0 && src < count) {
+      char buf[16];
+      snprintf(buf, sizeof(buf), "%u", (unsigned)heights[src]);
+      lv_label_set_text(blockNumLabels[i], buf);
+    } else {
+      lv_label_set_text(blockNumLabels[i], "");
+    }
+  }
+}
+
+
+
+static lv_obj_t* ivTargetLine = nullptr;
+
+
+static void iv_update_target_line() {
+  if (!intervalChart || !ivTargetLine) return;
+  lv_area_t a; lv_obj_get_content_coords(intervalChart, &a);  // chart plot box
+  const float yMin = 0.f, yMax = 25.f;                        // keep in sync with set_range
+  float frac = (10.f - yMin) / (yMax - yMin);                 // 0..1 up from bottom
+  lv_coord_t y = a.y2 - (lv_coord_t)lroundf(frac * (a.y2 - a.y1));
+  lv_point_t pts[2] = { {a.x1, y}, {a.x2, y} };
+  lv_line_set_points(ivTargetLine, pts, 2);
+}
+
+// Create the row of 12 labels beneath the chart; call once from create_metrics_screen()
+static void ensure_block_label_row() {
+  if (intervalLabelRow) return;
+
+  intervalLabelRow = lv_obj_create(intervalCard);
+  lv_obj_remove_style_all(intervalLabelRow);
+  lv_obj_set_size(intervalLabelRow, LV_PCT(100), LV_SIZE_CONTENT);
+  lv_obj_set_style_bg_opa(intervalLabelRow, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_pad_top(intervalLabelRow, 4, 0);
+  lv_obj_set_style_pad_left(intervalLabelRow, 6, 0);
+  lv_obj_set_style_pad_right(intervalLabelRow, 6, 0);
+
+  // Even spacing under the 12 bars
+  lv_obj_set_flex_flow(intervalLabelRow, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(intervalLabelRow,
+                        LV_FLEX_ALIGN_SPACE_BETWEEN,
+                        LV_FLEX_ALIGN_CENTER,
+                        LV_FLEX_ALIGN_CENTER);
+
+  for (int i = 0; i < 12; ++i) {
+    blockNumLabels[i] = lv_label_create(intervalLabelRow);
+    lv_obj_set_style_text_color(blockNumLabels[i], lv_color_hex(0x9AA0A6), 0);
+    lv_obj_set_style_text_font(blockNumLabels[i], &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_align(blockNumLabels[i], LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(blockNumLabels[i], ""); // init empty
+  }
+}
+
+
+static void apply_accent_to_interval() {
+  if (intervalSeries) intervalSeries->color = ACC_SECONDARY();       // bars
+  if (ivTargetLine)   lv_obj_set_style_line_color(ivTargetLine, ACC_PRIMARY(), 0); // dashed
   lv_chart_refresh(intervalChart);
 }
 
@@ -1075,14 +1147,14 @@ lv_label_set_text(targetPill, "target 10min");
 
 // Chart: BAR type, 12 columns, 0..60 minutes
 intervalChart = lv_chart_create(intervalCard);
-lv_obj_set_size(intervalChart, 640, 110);
+lv_obj_set_size(intervalChart, 640, 140);
 lv_obj_set_style_bg_opa(intervalChart, LV_OPA_TRANSP, 0);
 lv_obj_set_style_border_width(intervalChart, 0, 0);
 lv_chart_set_type(intervalChart, LV_CHART_TYPE_BAR);
 lv_chart_set_point_count(intervalChart, 12);
 lv_chart_set_div_line_count(intervalChart, 0, 0);
 lv_chart_set_update_mode(intervalChart, LV_CHART_UPDATE_MODE_SHIFT);
-lv_chart_set_range(intervalChart, LV_CHART_AXIS_PRIMARY_Y, 0, 60);
+lv_chart_set_range(intervalChart, LV_CHART_AXIS_PRIMARY_Y, 0, 25);
 
 // Outer padding so bars don't touch the card edges
 lv_obj_set_style_pad_left(intervalChart, 6, 0);
@@ -1095,9 +1167,31 @@ lv_obj_set_style_size(intervalChart, 10, LV_PART_ITEMS);
 // bars use the SECONDARY accent (glowy cyan in your theme)
 intervalSeries = lv_chart_add_series(intervalChart, ACC_SECONDARY(), LV_CHART_AXIS_PRIMARY_Y);
 
-// seed demo values (you’ll wire live data in next step)
+
+
+
+// create dashed 10-minute target line over the chart
+if (!ivTargetLine) ivTargetLine = lv_line_create(intervalCard);
+lv_obj_add_flag(ivTargetLine, LV_OBJ_FLAG_IGNORE_LAYOUT);
+lv_obj_set_style_line_width(ivTargetLine, 2, 0);
+lv_obj_set_style_line_dash_width(ivTargetLine, 6, 0);
+lv_obj_set_style_line_dash_gap(ivTargetLine, 6, 0);
+// color complements bars; apply_accent_to_interval() will keep it in sync
+lv_obj_set_style_line_color(ivTargetLine, ACC_PRIMARY(), 0);
+
+// position it ~40–50% up, synced to chart range [0..25]
+iv_update_target_line();   // call after lv_chart_set_range(...)
+// Create the block-number row under the chart
+ensure_block_label_row();
+
+
+
+// seed demo values 
+#if 0
 static const uint8_t kDemoIntervals[12] = { 9, 12, 7, 8, 11, 4, 16, 10, 6, 14, 9, 8 };
 ui_update_block_intervals(kDemoIntervals, 12);
+#endif
+
 
 // small descriptive line (like your HTML)
 lv_obj_t* ivSub = lv_label_create(intervalCard);
@@ -1171,25 +1265,27 @@ lv_label_set_recolor(midLine2Label, true);
 }
 
 
-hydrate_metrics_from_cache();
+// hydrate_metrics_from_cache();
 
-// TEMP: demo values (remove once wired)
+#if 0   // ⛔️ Disable the filler
 ui_update_mid_metrics(
   605.0f,   // hashrate EH/s
   -1.23f,   // difficulty change %
-  12,       // days since difficulty adjustment
-  1.23e12f, // market cap USD
-  19780000, // circulating BTC
-  69000.0f, // ATH USD
+  12,       // days since diff adj
+  1.23e12f, // market cap
+  19780000, // circulating
+  69000.0f, // ATH
   650,      // days since ATH
-  -12.5f    // fromAthPct (negative: below ATH)
+  -12.5f
 );
+#endif
 
-apply_accent_swap_to_widgets(); // ensure initial colors match current mapping
 
-
+  apply_accent_swap_to_widgets();
+  apply_accent_to_interval();   
   return scr;
 }
+
 
 // --------------------------------------------------
 // --------------------------------------------------
