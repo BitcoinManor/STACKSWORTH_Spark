@@ -189,13 +189,75 @@ lv_obj_set_size(cardFan,  LV_PCT(49), LV_SIZE_CONTENT);
 // minimal titles only (we’ll style/border later)
 lv_obj_t* t1 = lv_label_create(cardTemp);
 lv_label_set_text(t1, "Temperature");
+lv_obj_set_style_text_color(t1, lv_color_hex(axe::brand::orange), 0);
+lv_obj_set_style_text_font (t1, &lv_font_montserrat_16, 0); 
 
 lv_obj_t* t2 = lv_label_create(cardFan);
 lv_label_set_text(t2, "Fan");
+lv_obj_set_style_text_color(t2, lv_color_hex(axe::color::text), 0);
+lv_obj_set_style_text_font (t2, &lv_font_montserrat_16, 0); 
 
 
 
 
+// ── ROW 2: two cards below row1
+lv_obj_t* row2 = lv_obj_create(scr);                    // make a second row container
+lv_obj_remove_style_all(row2);                          // no default styles
+lv_obj_set_style_bg_opa(row2, LV_OPA_TRANSP, 0);        // fully transparent row bg
+lv_obj_set_size(row2, LV_PCT(100), LV_SIZE_CONTENT);    // full width; height fits its children
+
+lv_obj_align_to(row2, row1, LV_ALIGN_OUT_BOTTOM_MID, 0, 8); // stick row2 right under row1 (8px gap)
+
+lv_obj_set_flex_flow(row2, LV_FLEX_FLOW_ROW);           // lay out children left→right
+lv_obj_set_style_pad_left  (row2, axe::spacing::lg, 0); // keep cards away from edges (left)
+lv_obj_set_style_pad_right (row2, axe::spacing::lg, 0); // ...and right
+lv_obj_set_style_pad_gap   (row2, 8, 0);                // small gap between the two cards
+
+// same standard card factory so it matches other screens
+lv_obj_t* cardShares = ui::make_card(row2);             // left card
+lv_obj_set_size(cardShares, LV_PCT(49), LV_SIZE_CONTENT);
+
+lv_obj_t* cardPower  = ui::make_card(row2);             // right card
+lv_obj_set_size(cardPower,  LV_PCT(49), LV_SIZE_CONTENT);
+
+// minimal titles (we’ll style/border later)
+lv_obj_t* t3 = lv_label_create(cardShares);
+lv_label_set_text(t3, "Shares");
+lv_obj_set_style_text_color(t3, lv_color_hex(axe::color::text), 0);
+lv_obj_set_style_text_font (t3, &lv_font_montserrat_16, 0); 
+
+
+lv_obj_t* t4 = lv_label_create(cardPower);
+lv_label_set_text(t4, "Power / Efficiency");
+lv_obj_set_style_text_color(t4, lv_color_hex(axe::brand::orange), 0);
+lv_obj_set_style_text_font (t4, &lv_font_montserrat_16, 0); 
+
+
+
+
+
+
+// ── ROW 3: one cards below row2
+lv_obj_t* row3 = lv_obj_create(scr);                    // make a third row container
+lv_obj_remove_style_all(row3);                          // no default styles
+lv_obj_set_style_bg_opa(row3, LV_OPA_TRANSP, 20);        // fully transparent row bg
+lv_obj_set_size(row3, LV_PCT(100), LV_SIZE_CONTENT);    // full width; height fits its children
+
+lv_obj_align_to(row3, row2, LV_ALIGN_OUT_BOTTOM_MID, 0, 8); // stick row2 right under row1 (8px gap)
+
+
+lv_obj_set_flex_flow(row3, LV_FLEX_FLOW_ROW);           // lay out children left→right
+lv_obj_set_style_pad_left  (row3, axe::spacing::lg, 0); // keep cards away from edges (left)
+lv_obj_set_style_pad_right (row3, axe::spacing::lg, 0); // ...and right
+
+
+lv_obj_t* cardModel = ui::make_card(row3);             // centre card
+lv_obj_set_size(cardModel, LV_PCT(100), LV_SIZE_CONTENT);
+
+lv_obj_t* t5 = lv_label_create(cardModel);
+lv_label_set_text(t5, "Model");
+lv_obj_set_style_text_color(t5, lv_color_hex(axe::color::text), 0);
+lv_obj_set_style_text_font (t5, &lv_font_montserrat_16, 0); 
 
 
 
