@@ -155,31 +155,49 @@ static void mid_fetch_difficulty() {
   g_midLast.valid = true;
 }
 
-// Circulating (sats) + Market Cap + ATH
+// Circulating (sats) + Market Cap + ATH (fallbacks only)
 static void mid_fetch_supply_market_ath() {
+  // 1) Circulating (sats)
   String body;
   if (!http_get_text("https://blockchain.info/q/totalbc", body)) return;
   unsigned long long sats = strtoull(body.c_str(), nullptr, 10);
   double circBtc = sats / 100000000.0;
   g_midLast.circBtc = (float)circBtc;
 
+  // 2) Market cap = USD price * circ
+  // Try to parse USD price from known strings we already display
+  auto parseUsd = [](const String& s)->double {
+    if (!s.length()) return 0.0;
+    String t = s;
+    t.replace(",", "");
+    t.replace("$", "");
+    t.replace("USD", "");
+    t.trim();
+    return t.toFloat();  // tolerant of e.g. "91234.56"
+  };
+
   double px = 0.0;
-  if (Cache::price.usd > 0) px = Cache::price.usd;
-  if (px == 0.0 && Cache::price.usdPretty.length()) {
-    String s = Cache::price.usdPretty; s.replace(",", ""); s.replace("$", "");
-    px = s.toFloat();
-  }
+  // Prefer your live label cache first
+  if (lastPrice.length()) px = parseUsd(lastPrice);
+  // Fallback to your cached pretty string if available
+  if (px == 0.0 && Cache::price.usdPretty.length()) px = parseUsd(Cache::price.usdPretty);
+
   if (px > 0.0) g_midLast.marketCapUsd = (float)(px * circBtc);
 
-  g_midLast.athUsd = (Cache::price.athUsd > 0) ? Cache::price.athUsd : 69000.0f;
-  if (Cache::price.athDaysSince > 0) g_midLast.athDaysAgo = Cache::price.athDaysSince;
-  else {
+  // 3) ATH + days since ATH — use conservative fallbacks
+  g_midLast.athUsd = 69000.0f;  // fallback ATH
+  {
     time_t now = time(nullptr);
-    long days = (now > 1636502400) ? (long)((now - 1636502400) / 86400) : 0; // 2021-11-10
+    const time_t ath_ts = 1636502400; // 2021-11-10 00:00:00 UTC
+    long days = (now > ath_ts) ? (long)((now - ath_ts) / 86400) : 0;
     g_midLast.athDaysAgo = (int)days;
   }
+
   g_midLast.valid = true;
 }
+
+
+
 
 // Staggered tick
 static void mid_metrics_tick() {
