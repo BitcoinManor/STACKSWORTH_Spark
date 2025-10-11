@@ -10,6 +10,8 @@
 #include "data_store.h"
 #include <Preferences.h>
 #include <math.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
 
 
 
@@ -100,6 +102,100 @@ lv_obj_t* midLine2Label = nullptr;
 
 // cache last-known block timestamp (UNIX seconds)
 static uint32_t c_block_ts = 0;
+
+// ── Mid-strip fetch state ──────────────────────────────────────────
+static unsigned long g_mid_last_ms = 0;
+static uint8_t g_mid_phase = 0;                 // 0=hashrate, 1=diff, 2=supply/market/ath
+static const unsigned long MID_FETCH_INTERVAL_MS = 7000;  // ~7s between tiny calls
+
+static bool http_get_text(const char* url, String& out, uint16_t timeoutMs = 6000) {
+  if (WiFi.status() != WL_CONNECTED) return false;
+  HTTPClient http;
+  http.setTimeout(timeoutMs);
+  if (!http.begin(url)) return false;
+  int code = http.GET();
+  if (code == HTTP_CODE_OK) { out = http.getString(); http.end(); return true; }
+  http.end();
+  return false;
+}
+
+
+// Hashrate (Blockchain.info /q/hashrate -> GH/s)
+static void mid_fetch_hashrate() {
+  String body;
+  if (!http_get_text("https://blockchain.info/q/hashrate", body)) return;
+  double ghs = body.toDouble();         // GH/s
+  if (ghs <= 0) return;
+  g_midLast.hashrateEh = (float)(ghs / 1e9);  // EH/s
+  g_midLast.valid = true;
+}
+
+// Difficulty (mempool.space)
+static void mid_fetch_difficulty() {
+  String body;
+  if (!http_get_text("https://mempool.space/api/v1/difficulty-adjustment", body)) return;
+
+  auto findNumber = [&](const char* key)->double {
+    int k = body.indexOf(key); if (k < 0) return NAN;
+    k = body.indexOf(':', k);  if (k < 0) return NAN;
+    int e = k + 1; while (e < (int)body.length() && body[e] == ' ') e++;
+    int s = e;
+    while (e < (int)body.length() && ((body[e]>='0'&&body[e]<='9')||body[e]=='-'||body[e]=='+'||body[e]=='.')) e++;
+    return body.substring(s, e).toFloat();
+  };
+
+  double diffChange = findNumber("\"difficultyChange\"");
+  double estDaysToNext = findNumber("\"estimatedDays\"");
+  if (!isnan(diffChange)) g_midLast.diffPct = (float)diffChange;
+  if (!isnan(estDaysToNext)) {
+    float daysSince = 14.0f - (float)estDaysToNext;
+    if (daysSince < 0) daysSince = 0;
+    g_midLast.diffDaysAgo = (int)lroundf(daysSince);
+  }
+  g_midLast.valid = true;
+}
+
+// Circulating (sats) + Market Cap + ATH
+static void mid_fetch_supply_market_ath() {
+  String body;
+  if (!http_get_text("https://blockchain.info/q/totalbc", body)) return;
+  unsigned long long sats = strtoull(body.c_str(), nullptr, 10);
+  double circBtc = sats / 100000000.0;
+  g_midLast.circBtc = (float)circBtc;
+
+  double px = 0.0;
+  if (Cache::price.usd > 0) px = Cache::price.usd;
+  if (px == 0.0 && Cache::price.usdPretty.length()) {
+    String s = Cache::price.usdPretty; s.replace(",", ""); s.replace("$", "");
+    px = s.toFloat();
+  }
+  if (px > 0.0) g_midLast.marketCapUsd = (float)(px * circBtc);
+
+  g_midLast.athUsd = (Cache::price.athUsd > 0) ? Cache::price.athUsd : 69000.0f;
+  if (Cache::price.athDaysSince > 0) g_midLast.athDaysAgo = Cache::price.athDaysSince;
+  else {
+    time_t now = time(nullptr);
+    long days = (now > 1636502400) ? (long)((now - 1636502400) / 86400) : 0; // 2021-11-10
+    g_midLast.athDaysAgo = (int)days;
+  }
+  g_midLast.valid = true;
+}
+
+// Staggered tick
+static void mid_metrics_tick() {
+  unsigned long now = millis();
+  if (now - g_mid_last_ms < MID_FETCH_INTERVAL_MS) return;
+  g_mid_last_ms = now;
+
+  switch (g_mid_phase) {
+    case 0: mid_fetch_hashrate(); break;
+    case 1: mid_fetch_difficulty(); break;
+    case 2: mid_fetch_supply_market_ath(); break;
+  }
+  g_mid_phase = (g_mid_phase + 1) % 3;
+  repaint_mid_strip();
+}
+
 
 
 extern lv_obj_t* backBtn;
@@ -631,7 +727,7 @@ static void apply_accent_to_interval() {
 
 
 
- //CREATE METRICS SCREEN
+ //CREATE METRICS SCREEN/////////////////
 
 lv_obj_t* create_metrics_screen() {
 lv_obj_t* scr = lv_obj_create(NULL);
@@ -1282,7 +1378,15 @@ ui_update_mid_metrics(
 
 
   apply_accent_swap_to_widgets();
-  apply_accent_to_interval();   
+  apply_accent_to_interval(); 
+
+  // ── Timer to refresh middle metrics ──
+  static lv_timer_t* mid_timer = nullptr;
+  if (!mid_timer) {
+    mid_timer = lv_timer_create([](lv_timer_t*) { mid_metrics_tick(); }, 1000, nullptr);
+  }
+
+    
   return scr;
 }
 
