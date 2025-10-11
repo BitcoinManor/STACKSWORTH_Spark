@@ -41,12 +41,16 @@ static void refresh_accent_hex_from_theme() {
 // Last known values for the mid-strip so we can repaint when swapping
 static struct {
   float hashrateEh = 0;
+  float diffNow = 0;
   float diffPct = 0;
   int   diffDaysAgo = 0;
+  int   diffDaysToNext = 0;
+  time_t retargetTs = 0;   // absolute retarget timestamp (UTC)
   float marketCapUsd = 0;
   float circBtc = 0;
   float athUsd = 0;
   int   athDaysAgo = 0;
+  float  fromAthPct = 0;   // negative when current < ATH
   bool  valid = false;
 } g_midLast;
 
@@ -103,6 +107,33 @@ lv_obj_t* midLine2Label = nullptr;
 // cache last-known block timestamp (UNIX seconds)
 static uint32_t c_block_ts = 0;
 
+// Parse "YYYY-MM-DDTHH:MM:SS[.sss]Z" (UTC) -> time_t
+static time_t parse_iso_utc(const String& iso) {
+  if (iso.length() < 20) return 0;
+  int y = iso.substring(0,4).toInt();
+  int m = iso.substring(5,7).toInt();
+  int d = iso.substring(8,10).toInt();
+  int H = iso.substring(11,13).toInt();
+  int M = iso.substring(14,16).toInt();
+  int S = iso.substring(17,19).toInt();
+  struct tm t {}; t.tm_year = y - 1900; t.tm_mon = m - 1; t.tm_mday = d;
+  t.tm_hour = H; t.tm_min = M; t.tm_sec = S;
+  // Convert to UTC epoch without timegm()
+  time_t local = mktime(&t);          // interprets t as local time
+  struct tm g; gmtime_r(&local, &g);  // convert back to UTC components
+  time_t diff = local - mktime(&g);   // local-UTC offset in seconds
+  return local - diff;                // normalize to UTC epoch
+}
+
+// UTC time_t -> "Oct 16, 2025"
+static void fmt_date_from_ts_utc(time_t ts, char* out, size_t n) {
+  if (ts <= 0) { snprintf(out, n, "—"); return; }
+  struct tm tmv; gmtime_r(&ts, &tmv);
+  static const char* M[] = {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
+  snprintf(out, n, "%s %d, %d", M[tmv.tm_mon], tmv.tm_mday, tmv.tm_year + 1900);
+}
+
+
 // ── Mid-strip fetch state ──────────────────────────────────────────
 static unsigned long g_mid_last_ms = 0;
 static uint8_t g_mid_phase = 0;                 // 0=hashrate, 1=diff, 2=supply/market/ath
@@ -130,71 +161,165 @@ static void mid_fetch_hashrate() {
   g_midLast.valid = true;
 }
 
-// Difficulty (mempool.space)
+// Difficulty (mempool.space) + current difficulty (blockchain.info) + implied hashrate
 static void mid_fetch_difficulty() {
+  // 1) mempool snapshot
   String body;
-  if (!http_get_text("https://mempool.space/api/v1/difficulty-adjustment", body)) return;
+  if (http_get_text("https://mempool.space/api/v1/difficulty-adjustment", body)) {
+    auto num = [&](const char* key)->double {
+      int k = body.indexOf(key); if (k<0) return NAN;
+      k = body.indexOf(':', k);  if (k<0) return NAN;
+      int e = k+1; while (e<(int)body.length() && body[e]==' ') e++;
+      int s = e;  while (e<(int)body.length() && ((body[e]>='0'&&body[e]<='9')||body[e]=='-'||body[e]=='+'||body[e]=='.'||body[e]=='e'||body[e]=='E')) e++;
+      return body.substring(s,e).toFloat();
+    };
+    auto integer = [&](const char* key)->long {
+      int k = body.indexOf(key); if (k<0) return -1;
+      k = body.indexOf(':', k);  if (k<0) return -1;
+      int e = k+1; while (e<(int)body.length() && body[e]==' ') e++;
+      int s = e;  while (e<(int)body.length() && (body[e]>='0'&&body[e]<='9')) e++;
+      return body.substring(s,e).toInt();
+    };
+    auto iso = [&](const char* key)->String {
+      int k = body.indexOf(key); if (k<0) return String();
+      k = body.indexOf(':', k);  if (k<0) return String();
+      k = body.indexOf('\"', k); if (k<0) return String();
+      int s = k+1; int e = body.indexOf('\"', s); if (e<0) return String();
+      return body.substring(s,e);
+    };
 
-  auto findNumber = [&](const char* key)->double {
-    int k = body.indexOf(key); if (k < 0) return NAN;
-    k = body.indexOf(':', k);  if (k < 0) return NAN;
-    int e = k + 1; while (e < (int)body.length() && body[e] == ' ') e++;
-    int s = e;
-    while (e < (int)body.length() && ((body[e]>='0'&&body[e]<='9')||body[e]=='-'||body[e]=='+'||body[e]=='.')) e++;
-    return body.substring(s, e).toFloat();
-  };
+    double diffChange      = num("\"difficultyChange\"");
+    double estDaysToNext   = num("\"estimatedDays\"");
+    long   remainingBlocks = integer("\"remainingBlocks\"");
+    double timeLeftSecs    = num("\"timeLeft\"");
+    String isoRetarget     = iso("\"estimatedRetargetDate\"");
 
-  double diffChange = findNumber("\"difficultyChange\"");
-  double estDaysToNext = findNumber("\"estimatedDays\"");
-  if (!isnan(diffChange)) g_midLast.diffPct = (float)diffChange;
-  if (!isnan(estDaysToNext)) {
-    float daysSince = 14.0f - (float)estDaysToNext;
-    if (daysSince < 0) daysSince = 0;
-    g_midLast.diffDaysAgo = (int)lroundf(daysSince);
+    if (!isnan(diffChange)) g_midLast.diffPct = (float)diffChange;
+
+    // derive days from each signal (use the strongest)
+    double d_est  = (!isnan(estDaysToNext)  && estDaysToNext  > 0) ? estDaysToNext           : 0.0;
+    double d_blk  = (remainingBlocks        >  0)                    ? (remainingBlocks/144.0) : 0.0;
+    double d_sec  = (!isnan(timeLeftSecs)   && timeLeftSecs   > 0) ? (timeLeftSecs/86400.0)   : 0.0;
+    double best   = d_est; if (d_blk > best) best = d_blk; if (d_sec > best) best = d_sec;
+
+    // days since last (approx, if est available)
+    if (!isnan(estDaysToNext)) {
+      float since = 14.f - (float)estDaysToNext; if (since < 0) since = 0;
+      g_midLast.diffDaysAgo = (int)lroundf(since);
+    }
+
+    // finalize days-to-next (ceil, and clamp minimum 1 when positive)
+    int dtn = (int)ceil(best);
+    if (dtn <= 0 && best > 0.0) dtn = 1;
+    g_midLast.diffDaysToNext = dtn;
+
+    // absolute retarget timestamp (for the pretty date)
+    g_midLast.retargetTs = 0;
+    if (isoRetarget.length() >= 20) {
+      g_midLast.retargetTs = parse_iso_utc(isoRetarget);
+    }
+  }
+
+  // 2) current difficulty + implied EH/s (same as you had)
+  String d;
+  if (http_get_text("https://blockchain.info/q/getdifficulty", d)) {
+    double diffNow = d.toDouble();
+    if (diffNow > 0) {
+      g_midLast.diffNow = (float)diffNow;
+      const double two32 = 4294967296.0;
+      g_midLast.hashrateEh = (float)((diffNow * two32 / 600.0) / 1e18);
+    }
   }
   g_midLast.valid = true;
 }
+
+
+
+// Format (now + days) as "Oct 16, 2025" (UTC)
+static void fmt_date_plus_days(int days, char* out, size_t n) {
+  if (days < 0) days = 0;
+  time_t now;
+  time(&now);
+  time_t t = now + (time_t)ceil(days * 86400.0);
+  struct tm tmv;
+  gmtime_r(&t, &tmv);  // use UTC, matches Clark Moody
+  static const char* MONTHS[] = {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
+  const char* mon = (tmv.tm_mon >=0 && tmv.tm_mon < 12) ? MONTHS[tmv.tm_mon] : "???";
+  snprintf(out, n, "%s %d, %d", mon, tmv.tm_mday, tmv.tm_year + 1900);
+}
+
+
+
 
 // Circulating (sats) + Market Cap + ATH (fallbacks only)
 static void mid_fetch_supply_market_ath() {
-  // 1) Circulating (sats)
+  // 1) Circulating (sats -> BTC)
   String body;
-  if (!http_get_text("https://blockchain.info/q/totalbc", body)) return;
-  unsigned long long sats = strtoull(body.c_str(), nullptr, 10);
-  double circBtc = sats / 100000000.0;
-  g_midLast.circBtc = (float)circBtc;
+  if (http_get_text("https://blockchain.info/q/totalbc", body)) {
+    unsigned long long sats = strtoull(body.c_str(), nullptr, 10);
+    g_midLast.circBtc = (float)(sats / 100000000.0);
+  }
 
-  // 2) Market cap = USD price * circ
-  // Try to parse USD price from known strings we already display
+  // 2) Current USD price from what we already show
   auto parseUsd = [](const String& s)->double {
     if (!s.length()) return 0.0;
-    String t = s;
-    t.replace(",", "");
-    t.replace("$", "");
-    t.replace("USD", "");
-    t.trim();
-    return t.toFloat();  // tolerant of e.g. "91234.56"
+    String t = s; t.replace(",", ""); t.replace("$",""); t.replace("USD",""); t.trim();
+    return t.toFloat();
   };
-
   double px = 0.0;
-  // Prefer your live label cache first
   if (lastPrice.length()) px = parseUsd(lastPrice);
-  // Fallback to your cached pretty string if available
   if (px == 0.0 && Cache::price.usdPretty.length()) px = parseUsd(Cache::price.usdPretty);
+  if (px > 0.0 && g_midLast.circBtc > 0.0f) g_midLast.marketCapUsd = (float)(px * g_midLast.circBtc);
 
-  if (px > 0.0) g_midLast.marketCapUsd = (float)(px * circBtc);
+  // 3) ATH & ATH date (CoinGecko)
+  String cg;
+  if (http_get_text("https://api.coingecko.com/api/v3/coins/bitcoin?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false", cg)) {
+    auto num = [&](const char* key)->double {
+      int k = cg.indexOf(key); if (k<0) return NAN;
+      k = cg.indexOf(':', k);  if (k<0) return NAN;
+      int e = k+1; while (e<(int)cg.length() && cg[e]==' ') e++;
+      int s = e;  while (e<(int)cg.length() && ((cg[e]>='0'&&cg[e]<='9')||cg[e]=='-'||cg[e]=='+'||cg[e]=='.'||cg[e]=='e'||cg[e]=='E')) e++;
+      return cg.substring(s,e).toFloat();
+    };
+    auto iso = [&](const char* key)->String {
+      int k = cg.indexOf(key); if (k<0) return String();
+      k = cg.indexOf(':', k);  if (k<0) return String();
+      k = cg.indexOf('\"', k); if (k<0) return String();
+      int s = k+1; int e = cg.indexOf('\"', s); if (e<0) return String();
+      return cg.substring(s,e);
+    };
 
-  // 3) ATH + days since ATH — use conservative fallbacks
-  g_midLast.athUsd = 69000.0f;  // fallback ATH
-  {
-    time_t now = time(nullptr);
-    const time_t ath_ts = 1636502400; // 2021-11-10 00:00:00 UTC
-    long days = (now > ath_ts) ? (long)((now - ath_ts) / 86400) : 0;
-    g_midLast.athDaysAgo = (int)days;
+    // market_data.ath.usd and market_data.ath_date.usd
+    double athUsd = num("\"ath\":{\"usd\"");
+    if (isnan(athUsd)) {
+      int a = cg.indexOf("\"ath\"");
+      if (a >= 0) { int u = cg.indexOf("\"usd\":", a); if (u >= 0) athUsd = cg.substring(u+6, u+6+16).toFloat(); }
+    }
+    String athIso = iso("\"ath_date\":{\"usd\"");
+    if (!athIso.length()) {
+      int a = cg.indexOf("\"ath_date\"");
+      if (a >= 0) { int u = cg.indexOf("\"usd\":\"", a); if (u >= 0) { int s = u+7; int e = cg.indexOf('\"', s); if (e>s) athIso = cg.substring(s,e); } }
+    }
+
+    if (!isnan(athUsd) && athUsd > 0) g_midLast.athUsd = (float)athUsd;
+    if (athIso.length() >= 20) {
+      time_t ts = parse_iso_utc(athIso);
+      if (ts > 0) {
+        time_t now = time(nullptr);
+        long days = (now > ts) ? (long)((now - ts) / 86400) : 0;
+        g_midLast.athDaysAgo = (int)days;
+      }
+    }
+  }
+
+  // 4) % from ATH (negative when below)
+  if (g_midLast.athUsd > 0 && px > 0.0) {
+    g_midLast.fromAthPct = (float)((px - g_midLast.athUsd) / g_midLast.athUsd * 100.0);
   }
 
   g_midLast.valid = true;
 }
+
 
 
 
@@ -246,6 +371,17 @@ static void fmt_int_commas_ul(unsigned long v, char* out, size_t n) {
   strncpy(out, s.c_str(), n);
   out[n-1] = '\0';
 }
+
+// Compact difficulty formatter (e.g., "79.3 T")
+static void fmt_difficulty_compact(double diff, char* out, size_t n) {
+  if (diff >= 1e12)      snprintf(out, n, "%.2f T", diff / 1e12);
+  else if (diff >= 1e9)  snprintf(out, n, "%.2f B", diff / 1e9);
+  else if (diff >= 1e6)  snprintf(out, n, "%.2f M", diff / 1e6);
+  else if (diff >= 1e3)  snprintf(out, n, "%.2f K", diff / 1e3);
+  else                    snprintf(out, n, "%.0f",  diff);
+}
+
+
 
 // ── Public: update the mid-strip with real values ──────────────────
 // fromAthPct: negative if price is below ATH (mirrors dashboard behavior)
@@ -577,35 +713,60 @@ static void repaint_mid_strip() {
   const char* hexL1 = g_hex_primary;   // Line 1 → primary (or swapped)
   const char* hexL2 = g_hex_secondary; // Line 2 → secondary (or swapped)
 
-  // Line 1: Hashrate / Difficulty
-  const char arrow  = (g_midLast.diffPct > 0) ? '▲' : ((g_midLast.diffPct < 0) ? '▼' : '◆');
-  const float absPc = g_midLast.diffPct >= 0 ? g_midLast.diffPct : -g_midLast.diffPct;
+  
+// Line 1: Hashrate / Difficulty / Est. Diff. Change / Retarget in X days
+char l1[360];
+char diffNowBuf[48]; fmt_difficulty_compact(g_midLast.diffNow, diffNowBuf, sizeof diffNowBuf);
 
-  char l1[200];
+if (g_midLast.retargetTs > 0) {
+  char retBuf[48];
+  fmt_date_from_ts_utc(g_midLast.retargetTs, retBuf, sizeof retBuf);           // e.g. "Oct 16, 2025"
+  // date in primary orange, label stays white
+  
   snprintf(l1, sizeof(l1),
-           "Hashrate: #%s %.0f EH/s#  •  Difficulty: #%s %c%.2f%%%# (#%s %dd#)",
-           hexL1, g_midLast.hashrateEh,
-           hexL1, arrow, absPc,
-           hexL1, g_midLast.diffDaysAgo);
-  lv_label_set_text(midLine1Label, l1);
+    "Hashrate: #%s %.0f EH/s#  •  Difficulty: #%s %s#  •  Est. Diff. Change: #%s %.2f%%#  •  Retarget: #%s %s#",
+    hexL1, g_midLast.hashrateEh,
+    hexL1, diffNowBuf,
+    hexL1, g_midLast.diffPct,
+    g_hex_primary, retBuf
+  );
+} else {
+  int d = g_midLast.diffDaysToNext; if (d < 0) d = 0;
+  const char* dayWord = (d==1) ? "day" : "days";
+  snprintf(l1, sizeof(l1),
+    "Hashrate: #%s %.0f EH/s#  •  Difficulty: #%s %s#  •  Est. Diff. Change: #%s %.2f%%#  •  Retarget: in #%s %d %s#",
+    hexL1, g_midLast.hashrateEh,
+    hexL1, diffNowBuf,
+    hexL1, g_midLast.diffPct,
+    g_hex_primary, d, dayWord
+  );
+}
+lv_label_set_text(midLine1Label, l1);
+
+
+
 
   // Helpers for Line 2
-  char capBuf[32];  fmt_usd_compact(g_midLast.marketCapUsd, capBuf, sizeof capBuf);
-  unsigned long circ = (g_midLast.circBtc >= 0) ? (unsigned long)(g_midLast.circBtc + 0.5f) : 0;
-  char circNum[24]; fmt_int_commas_ul(circ, circNum, sizeof circNum);
-  char athBuf[32];  fmt_usd_compact(g_midLast.athUsd, athBuf, sizeof athBuf);
+char capBuf[32];  fmt_usd_compact(g_midLast.marketCapUsd, capBuf, sizeof capBuf);
+unsigned long circ = (g_midLast.circBtc >= 0) ? (unsigned long)(g_midLast.circBtc + 0.5f) : 0;
+char circNum[24]; fmt_int_commas_ul(circ, circNum, sizeof circNum);
+char athBuf[32];  fmt_usd_compact(g_midLast.athUsd, athBuf, sizeof athBuf);
 
-  // Line 2: Market Cap / Circulating / ATH
-  char l2[240];
-  snprintf(l2, sizeof(l2),
-           "Market Cap: #%s %s#  •  Circulating Supply: #%s %s / 21,000,000#  •  ATH: #%s %s# (#%s %dd ago#)",
-           hexL2, capBuf,
-           hexL2, circNum,
-           hexL2, athBuf,
-           hexL2, g_midLast.athDaysAgo);
-  lv_label_set_text(midLine2Label, l2);
+// % from ATH (signed)
+float pct = g_midLast.fromAthPct; char psign = (pct >= 0) ? '+' : '-';
+float pabs = (pct >= 0) ? pct : -pct;
+
+char l2[260];
+snprintf(l2, sizeof(l2),
+  "Market Cap: #%s %s#  •  Circ. Supply: #%s %s / 21,000,000#  •  ATH: #%s %s# (#%s %dd ago, %c%.2f%%%#)",
+  hexL2, capBuf,
+  hexL2, circNum,
+  hexL2, athBuf,
+  hexL2, g_midLast.athDaysAgo, psign, pabs
+);
+lv_label_set_text(midLine2Label, l2);
+
 }
-
 // Update other accent-colored widgets on this screen
 static void apply_accent_swap_to_widgets() {
   // SATS labels: flip with accents
@@ -1337,7 +1498,7 @@ lv_label_set_text(ivSub, "Each column = minutes between blocks; target = 10m.");
 // ── Mid-strip (two lines) centered between Back/Right ─────────────
 midStrip = lv_obj_create(scr);
 lv_obj_remove_style_all(midStrip);
-lv_obj_set_size(midStrip, LV_PCT(80), LV_SIZE_CONTENT);
+lv_obj_set_size(midStrip, LV_PCT(82), LV_SIZE_CONTENT);
 
 // keep it above the 24h footer
 const int FOOTER_H          = 160;
@@ -1357,10 +1518,10 @@ lv_obj_set_style_text_font(midLine1Label, &lv_font_montserrat_14, 0);
 lv_label_set_long_mode(midLine1Label, LV_LABEL_LONG_SCROLL_CIRCULAR);
 lv_label_set_recolor(midLine1Label, true);
 {
-  char init1[200];
+  char init1[220];
   snprintf(init1, sizeof(init1),
-           "Hashrate: #%s — EH/s#  •  Difficulty: #%s —%%# (#%s —d#)",
-           g_hex_primary, g_hex_primary, g_hex_primary);
+          "Hashrate: #%s — EH/s#  •  Difficulty: #%s —#  •  Est. Diff. Change: #%s —%%#  •  Retarget: in #%s — days#",
+          g_hex_primary, g_hex_primary, g_hex_primary, g_hex_primary);
   lv_label_set_text(midLine1Label, init1);
 }
 
