@@ -470,6 +470,50 @@ static inline bool mid_ready() {
          isfinite(g_mcapUsd)   && isfinite(g_circBtc) && isfinite(g_athUsd) && g_athDays >= 0;
 }
 
+// ===== Smart Cache System (Matrix-style) =====
+
+// Save successful API values to preferences for fallback use
+void saveDisplayCache() {
+  prefs.begin("cache", false);  // write mode
+  prefs.putString("lastPrice", lastPrice);
+  prefs.putString("lastFee", lastFee);
+  prefs.putString("lastBlockHeight", lastBlockHeight);
+  prefs.putString("lastMiner", lastMiner);
+  
+  // Save cache timestamp
+  prefs.putULong("cacheTime", millis());
+  prefs.end();
+  Serial.println("💾 Display cache saved");
+}
+
+// Load cached values on boot (fallback during API failures)
+void loadDisplayCache() {
+  prefs.begin("cache", true);  // read mode
+  
+  String cachedPrice = prefs.getString("lastPrice", "Loading…");
+  String cachedFee = prefs.getString("lastFee", "Loading…");
+  String cachedHeight = prefs.getString("lastBlockHeight", "Loading…");
+  String cachedMiner = prefs.getString("lastMiner", "Loading…");
+  
+  unsigned long cacheAge = millis() - prefs.getULong("cacheTime", 0);
+  prefs.end();
+  
+  // Use cached values as initial display (prevents blank screens)
+  lastPrice = cachedPrice;
+  lastFee = cachedFee;
+  lastBlockHeight = cachedHeight;
+  lastMiner = cachedMiner;
+  
+  // Update UI if labels exist
+  if (priceValueLabel) lv_label_set_text(priceValueLabel, lastPrice.c_str());
+  if (feeValueLabel) lv_label_set_text(feeValueLabel, lastFee.c_str());
+  if (blockValueLabel) lv_label_set_text(blockValueLabel, lastBlockHeight.c_str());
+  if (solvedByValueLabel) lv_label_set_text(solvedByValueLabel, lastMiner.c_str());
+  
+  Serial.printf("📦 Cache loaded (age: %lu ms) - Price: %s, Fee: %s, Height: %s, Miner: %s\n", 
+                cacheAge, cachedPrice.c_str(), cachedFee.c_str(), cachedHeight.c_str(), cachedMiner.c_str());
+}
+
 static void paint_mid_if_ready() {
   if (mid_ready()) {
     // last arg fromAthPct is unused in your UI for now
@@ -691,6 +735,7 @@ bool fetchPriceFromSatoNak() {
   p.satsUsd = satsLine;
   
   Serial.printf("✅ SatoNak Price: %s | Sats/%s: %d\n", priceText, currentFiat.c_str(), sats);
+  saveDisplayCache();  // 💾 Save to cache on success
   return true;
 }
 
@@ -719,6 +764,7 @@ bool fetchHeightFromSatoNak() {
     Cache::block.height = String(newHeight);
     
     Serial.printf("✅ SatoNak Height: %d\n", newHeight);
+    saveDisplayCache();  // 💾 Save to cache on success
     return true;
   }
   return false;
@@ -747,6 +793,7 @@ bool fetchMinerFromSatoNak() {
     Cache::block.miner = payload;
     
     Serial.printf("✅ SatoNak Miner: %s\n", payload.c_str());
+    saveDisplayCache();  // 💾 Save to cache on success
     return true;
   }
   return false;
@@ -800,6 +847,7 @@ bool fetchFeeFromSatoNak() {
     ui_update_fee_badges_lmh(low, med, high);
     
     Serial.printf("✅ SatoNak Fee: %d sat/vB\n", fee);
+    saveDisplayCache();  // 💾 Save to cache on success
     return true;
   }
   return false;
