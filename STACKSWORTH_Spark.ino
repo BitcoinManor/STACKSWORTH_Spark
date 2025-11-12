@@ -1406,6 +1406,9 @@ void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
 // --- World/Weather init ---
 load_city_tz_from_prefs();
 
+// 📦 Load cache for instant display (prevents blank screens)
+loadDisplayCache();
+
 // 1) Start SNTP once (do NOT pass an IANA zone here)
 configTime(0, 0, "pool.ntp.org", "time.nist.gov", "time.google.com");
 
