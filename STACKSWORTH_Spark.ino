@@ -40,9 +40,50 @@
 #include "esp_wifi.h"   // for esp_read_mac
 #include "data_store.h"
 #include <math.h>
+#include "axestack_theme.h"
 
+// ===== SatoNak API Configuration =====
+#define USE_SATONAK_API 1    // 1 = use SatoNak endpoints, 0 = fallback to original sources
 
+static const char* SATONAK_BASE   = "https://satonak.bitcoinmanor.com";
+static const char* SATONAK_PRICE  = "/api/price";   // supports ?fiat=EUR etc.
+static const char* SATONAK_HEIGHT = "/api/height";  
+static const char* SATONAK_MINER  = "/api/miner";   
+static const char* SATONAK_FEE    = "/api/fee";     
+static const char* SATONAK_HASHRATE = "/api/hashrate";
+static const char* SATONAK_CIRCSUPPLY = "/api/circsupply";
+static const char* SATONAK_ATH = "/api/ath";
+static const char* SATONAK_CHANGE24H = "/api/change24h";
+static const char* SATONAK_DAYS_SINCE_ATH = "/api/days_since_ath";
 
+// Default fiat (will be loaded from preferences)
+static String getCurrentFiatCode() {
+  return g_savedCurrency.length() > 0 ? g_savedCurrency : "USD";
+}
+
+// Get currency symbol for display
+static String getCurrencySymbol() {
+  String fiat = getCurrentFiatCode();
+  if (fiat == "USD") return "$";
+  if (fiat == "CAD") return "$";       // Clean $ since top row shows "CAD PRICE"
+  if (fiat == "EUR") return "";        // Clean number since top row shows "EUR PRICE"  
+  if (fiat == "GBP") return "";        // Clean number since top row shows "GBP PRICE"
+  if (fiat == "JPY") return "";        // Clean number since top row shows "JPY PRICE" 
+  if (fiat == "AUD") return "$";       // Clean $ since top row shows "AUD PRICE"
+  if (fiat == "CHF") return "";        // Clean number since top row shows "CHF PRICE"
+  if (fiat == "CNY") return "";        // Clean number since top row shows "CNY PRICE"
+  if (fiat == "SEK") return "";        // Clean number since top row shows "SEK PRICE"
+  if (fiat == "NOK") return "";        // Clean number since top row shows "NOK PRICE"
+  return ""; // fallback to no symbol
+}
+
+static inline String satonakUrl(const char* path, const char* fiat = nullptr) {
+  String u = String(SATONAK_BASE) + String(path);
+  if (fiat && fiat[0] != '\0') {
+    u += "?fiat="; u += fiat;
+  }
+  return u;
+}
 
 void ui_update_blocks_to_million(long height);
 
@@ -184,6 +225,10 @@ server.on("/ping", HTTP_GET, [](AsyncWebServerRequest* r){ r->send(200, "text/pl
       prefs.putString("city", req->arg("city"));
       prefs.putString("tz",   req->arg("timezone"));
       prefs.putString("device", req->arg("device"));
+      prefs.putString("currency", req->arg("currency"));  // 🌍 New currency support
+      prefs.putString("theme", req->arg("theme"));        // 🎨 New theme support
+      prefs.putString("toptext", req->arg("toptext"));    // 📝 Custom top message
+      prefs.putString("bottomtext", req->arg("bottomtext")); // 📝 Custom bottom message
       prefs.end();
       Serial.println("💾 Saved portal fields (urlencoded).");
     }
@@ -207,6 +252,10 @@ server.onRequestBody([](AsyncWebServerRequest *req, uint8_t *data, size_t len, s
   String city   = doc["city"]     | "";
   String tz     = doc["timezone"] | "";
   String device = doc["device"]   | "";
+  String currency = doc["currency"] | "USD";      // 🌍 Currency support
+  String theme = doc["theme"] | "scroll";         // 🎨 Theme support
+  String toptext = doc["toptext"] | "";           // 📝 Custom top message
+  String bottomtext = doc["bottomtext"] | "";     // 📝 Custom bottom message
 
   if (ssid.length()) {
     prefs.begin("sw", false);
@@ -215,6 +264,10 @@ server.onRequestBody([](AsyncWebServerRequest *req, uint8_t *data, size_t len, s
     prefs.putString("city", city);
     prefs.putString("tz",   tz);
     prefs.putString("device", device);
+    prefs.putString("currency", currency);    // 🌍 Save currency
+    prefs.putString("theme", theme);          // 🎨 Save theme
+    prefs.putString("toptext", toptext);      // 📝 Save custom top
+    prefs.putString("bottomtext", bottomtext); // 📝 Save custom bottom
     prefs.end();
     Serial.println("💾 Saved portal fields (JSON).");
   }
@@ -241,6 +294,10 @@ g_apName = apName;  // remember until LVGL ready
 // ===== World/Weather globals =====
 static String g_savedCity;
 static String g_savedTZ;     // e.g. "America/Edmonton"
+static String g_savedTopText;   // 📝 Custom top row message (max 10 chars)
+static String g_savedBottomText;// 📝 Custom bottom row message (max 10 chars)
+static String g_savedCurrency;  // 🌍 User's preferred currency (USD, EUR, etc.)
+static String g_savedTheme;     // 🎨 User's preferred theme (scroll, fade)
 static float  g_lat = 0.0f;
 static float  g_lon = 0.0f;
 
@@ -266,8 +323,14 @@ static void load_city_tz_from_prefs() {
   prefs.begin("sw", true);
   g_savedCity = prefs.getString("city", "");
   g_savedTZ   = prefs.getString("tz", "");
+  g_savedTopText = prefs.getString("toptext", "");       // 📝 Custom top row message
+  g_savedBottomText = prefs.getString("bottomtext", ""); // 📝 Custom bottom row message
+  g_savedCurrency = prefs.getString("currency", "USD");  // 🌍 Default to USD
+  g_savedTheme = prefs.getString("theme", "scroll");     // 🎨 Default to scroll
   prefs.end();
   Serial.printf("🌆 City: %s  |  TZ: %s\n", g_savedCity.c_str(), g_savedTZ.c_str());
+  Serial.printf("📝 Custom Messages - Top: '%s'  Bottom: '%s'\n", g_savedTopText.c_str(), g_savedBottomText.c_str());
+  Serial.printf("🌍 Currency: %s  |  Theme: %s\n", g_savedCurrency.c_str(), g_savedTheme.c_str());
 }
 
 // Apply timezone (Olson string) and start NTP
@@ -567,6 +630,180 @@ void showPortalScreen(const String& apName) {
   lv_scr_load(portalScreen);
 }
 
+// ===== SatoNak API Functions =====
+
+// Fetch Bitcoin price from SatoNak API with fallback
+bool fetchPriceFromSatoNak() {
+  if (WiFi.status() != WL_CONNECTED) return false;
+
+  String currentFiat = getCurrentFiatCode();
+  String url = satonakUrl(SATONAK_PRICE, currentFiat.c_str());
+  Serial.print("🌐 SatoNak Price GET: "); Serial.println(url);
+
+  HTTPClient http;
+  http.setTimeout(3000);
+  http.setConnectTimeout(2000); 
+  http.useHTTP10(true);
+  http.setReuse(false);
+
+  if (!http.begin(url)) return false;
+
+  int rc = http.GET();
+  if (rc != 200) { http.end(); return false; }
+
+  String payload = http.getString();
+  http.end();
+
+  // Parse response
+  DynamicJsonDocument doc(1536);
+  DeserializationError e = deserializeJson(doc, payload);
+  if (e) return false;
+
+  // Get price for current fiat
+  String key = currentFiat; key.toLowerCase();
+  double price = 0.0;
+  
+  if (doc.containsKey("value")) {
+    price = doc["value"] | 0.0;
+  }
+  
+  if (price <= 0.0) return false;
+
+  // Update price display
+  String symbol = getCurrencySymbol();
+  char priceText[32];
+  if (currentFiat == "USD") {
+    format_price_usd(price, priceText, sizeof(priceText));
+  } else {
+    format_price_usd(price, priceText, sizeof(priceText), symbol.c_str());
+  }
+  
+  lastPrice = priceText;
+  if (priceValueLabel) lv_label_set_text(priceValueLabel, priceText);
+  
+  // Calculate sats per currency
+  int sats = (price > 0.0f) ? (int)(100000000.0f / price) : 0;
+  String satsLine = sats ? String(sats) + " SATS / " + symbol + "1 " + currentFiat : String("… SATS / ") + symbol + "1 " + currentFiat;
+  
+  // Update cache
+  auto& p = Cache::price;
+  p.usdPretty = priceText;
+  p.satsUsd = satsLine;
+  
+  Serial.printf("✅ SatoNak Price: %s | Sats/%s: %d\n", priceText, currentFiat.c_str(), sats);
+  return true;
+}
+
+// Fetch block height from SatoNak API
+bool fetchHeightFromSatoNak() {
+  if (WiFi.status() != WL_CONNECTED) return false;
+
+  String url = String(SATONAK_BASE) + String(SATONAK_HEIGHT);
+  HTTPClient http;
+  http.setTimeout(3000);
+  
+  if (!http.begin(url)) return false;
+  
+  int rc = http.GET();
+  if (rc != 200) { http.end(); return false; }
+
+  String payload = http.getString();
+  http.end();
+  
+  payload.trim();
+  int newHeight = payload.toInt();
+  if (newHeight > 0) {
+    lastBlockHeight = String(newHeight);
+    if (blockValueLabel) lv_label_set_text(blockValueLabel, lastBlockHeight.c_str());
+    ui_update_blocks_to_million(newHeight);
+    Cache::block.height = String(newHeight);
+    
+    Serial.printf("✅ SatoNak Height: %d\n", newHeight);
+    return true;
+  }
+  return false;
+}
+
+// Fetch miner from SatoNak API  
+bool fetchMinerFromSatoNak() {
+  if (WiFi.status() != WL_CONNECTED) return false;
+
+  String url = String(SATONAK_BASE) + String(SATONAK_MINER);
+  HTTPClient http;
+  http.setTimeout(3000);
+  
+  if (!http.begin(url)) return false;
+  
+  int rc = http.GET();
+  if (rc != 200) { http.end(); return false; }
+
+  String payload = http.getString();
+  http.end();
+  
+  payload.trim();
+  if (payload.length() > 0 && payload.length() < 32) {
+    lastMiner = payload;
+    if (solvedByValueLabel) lv_label_set_text(solvedByValueLabel, payload.c_str());
+    Cache::block.miner = payload;
+    
+    Serial.printf("✅ SatoNak Miner: %s\n", payload.c_str());
+    return true;
+  }
+  return false;
+}
+
+// Fetch fees from SatoNak API
+bool fetchFeeFromSatoNak() {
+  if (WiFi.status() != WL_CONNECTED) return false;
+
+  String url = String(SATONAK_BASE) + "/api/fee";
+  HTTPClient http;
+  http.setTimeout(3000);
+  
+  if (!http.begin(url)) return false;
+  
+  int rc = http.GET();
+  if (rc != 200) { http.end(); return false; }
+
+  String payload = http.getString();
+  http.end();
+  
+  payload.trim();
+  
+  // Handle both plain text and JSON responses
+  int fee = 0;
+  if (payload.length() > 0 && payload.length() < 8 && isdigit(payload.charAt(0))) {
+    fee = payload.toInt();
+  } else {
+    DynamicJsonDocument doc(512);
+    if (deserializeJson(doc, payload) == DeserializationError::Ok) {
+      fee = doc["value"] | 0;
+    }
+  }
+  
+  if (fee > 0 && fee < 1000) {
+    char feeText[16];
+    snprintf(feeText, sizeof(feeText), "%d sat/vB", fee);
+    lastFee = feeText;
+    if (feeValueLabel) lv_label_set_text(feeValueLabel, feeText);
+    
+    // Update fee badges (use fee as high, estimate others)
+    int high = fee;
+    int med = (int)(fee * 0.8f);
+    int low = (int)(fee * 0.5f);
+    
+    auto& f = Cache::fees;
+    f.low = low; 
+    f.med = med; 
+    f.high = high;
+    
+    ui_update_fee_badges_lmh(low, med, high);
+    
+    Serial.printf("✅ SatoNak Fee: %d sat/vB\n", fee);
+    return true;
+  }
+  return false;
+}
 
 
  
@@ -574,152 +811,158 @@ void showPortalScreen(const String& apName) {
   if (WiFi.status() == WL_CONNECTED) {
       HTTPClient http;
 
-      // Step 1: Fetch Bitcoin Price (USD + CAD)
-http.begin("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,cad&include_24hr_change=true");
-int httpCode = http.GET();
-if (httpCode == 200) {
-    String payload = http.getString();
-    DynamicJsonDocument doc(512);
-    deserializeJson(doc, payload);
+      // Step 1: Fetch Bitcoin Price - Try SatoNak first, fallback to CoinGecko
+      if (!fetchPriceFromSatoNak()) {
+        Serial.println("⚠️ SatoNak price failed, trying CoinGecko fallback");
+        
+        http.begin("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,cad&include_24hr_change=true");
+        int httpCode = http.GET();
+        if (httpCode == 200) {
+            String payload = http.getString();
+            DynamicJsonDocument doc(512);
+            deserializeJson(doc, payload);
 
-    float usd = doc["bitcoin"]["usd"] | 0.0f;
-    float cad = doc["bitcoin"]["cad"] | 0.0f;
+            float usd = doc["bitcoin"]["usd"] | 0.0f;
+            float cad = doc["bitcoin"]["cad"] | 0.0f;
 
-    // USD price (pretty)
-    char usdBuf[32];
-    format_price_usd(usd, usdBuf, sizeof(usdBuf));  // → "$69,420.13"
-    lastPrice = usdBuf;
-    if (priceValueLabel) lv_label_set_text(priceValueLabel, usdBuf);
-    Serial.print("💰 Bitcoin Price (USD): "); Serial.println(usdBuf);
+            // USD price (pretty)
+            char usdBuf[32];
+            format_price_usd(usd, usdBuf, sizeof(usdBuf));  // → "$69,420.13"
+            lastPrice = usdBuf;
+            if (priceValueLabel) lv_label_set_text(priceValueLabel, usdBuf);
+            Serial.print("💰 Bitcoin Price (USD): "); Serial.println(usdBuf);
 
-    // Build CAD line and SATS/$ lines
-    char cadCore[32];
-    format_price_usd(cad, cadCore, sizeof(cadCore));     // "$69,420.13"
-    String cadLine = String("CAD ") + cadCore;
+            // Build CAD line and SATS/$ lines
+            char cadCore[32];
+            format_price_usd(cad, cadCore, sizeof(cadCore));     // "$69,420.13"
+            String cadLine = String("CAD ") + cadCore;
 
-    int sats_usd = (usd > 0.0f) ? (int)(100000000.0f / usd) : 0;
-    int sats_cad = (cad > 0.0f) ? (int)(100000000.0f / cad) : 0;
-    String satsUsdLine = sats_usd ? String(sats_usd) + " SATS / $1 USD" : String("… SATS / $1 USD");
-    String satsCadLine = sats_cad ? String(sats_cad) + " SATS / $1 CAD" : String("… SATS / $1 CAD");
+            int sats_usd = (usd > 0.0f) ? (int)(100000000.0f / usd) : 0;
+            int sats_cad = (cad > 0.0f) ? (int)(100000000.0f / cad) : 0;
+            String satsUsdLine = sats_usd ? String(sats_usd) + " SATS / $1 USD" : String("… SATS / $1 USD");
+            String satsCadLine = sats_cad ? String(sats_cad) + " SATS / $1 CAD" : String("… SATS / $1 CAD");
 
-    // 24h change
-    float changePct = doc["bitcoin"]["usd_24h_change"] | 0.0f;
-    Serial.printf("[price] 24h change (usd): %+.2f%%\n", changePct);
+            // 24h change
+            float changePct = doc["bitcoin"]["usd_24h_change"] | 0.0f;
+            Serial.printf("[price] 24h change (usd): %+.2f%%\n", changePct);
 
-    // ---- WRITE TO SHARED CACHE (so other screens hydrate instantly)
-    {
-      auto& p = Cache::price;
-      p.usdPretty   = usdBuf;        // "$69,420.13"
-      p.cadLine     = cadLine;       // "CAD $92,314.55"
-      p.satsUsd     = satsUsdLine;   // "1450 SATS / $1 USD"
-      p.satsCad     = satsCadLine;   // "1320 SATS / $1 CAD"
-      p.changePct   = changePct;
-      p.changeValid = true;
-    }
+            // ---- WRITE TO SHARED CACHE (so other screens hydrate instantly)
+            {
+              auto& p = Cache::price;
+              p.usdPretty   = usdBuf;        // "$69,420.13"
+              p.cadLine     = cadLine;       // "CAD $92,314.55"
+              p.satsUsd     = satsUsdLine;   // "1450 SATS / $1 USD"
+              p.satsCad     = satsCadLine;   // "1320 SATS / $1 CAD"
+              p.changePct   = changePct;
+              p.changeValid = true;
+            }
 
-    // Optional: still cache+paint the local per-screen strings
-    ui_cache_price_aux(cadLine, satsUsdLine, satsCadLine);
+            // Optional: still cache+paint the local per-screen strings
+            ui_cache_price_aux(cadLine, satsUsdLine, satsCadLine);
 
-    // (These direct sets are now redundant but harmless)
-    if (priceCadLabel) lv_label_set_text(priceCadLabel, cadLine.c_str());
-    if (satsUsdLabel)  lv_label_set_text(satsUsdLabel,  satsUsdLine.c_str());
-    if (satsCadLabel)  lv_label_set_text(satsCadLabel,  satsCadLine.c_str());
+            // (These direct sets are now redundant but harmless)
+            if (priceCadLabel) lv_label_set_text(priceCadLabel, cadLine.c_str());
+            if (satsUsdLabel)  lv_label_set_text(satsUsdLabel,  satsUsdLine.c_str());
+            if (satsCadLabel)  lv_label_set_text(satsCadLabel,  satsCadLine.c_str());
 
-    Serial.print("💵 Bitcoin Price (CAD): "); Serial.println(cadLine);
+            Serial.print("💵 Bitcoin Price (CAD): "); Serial.println(cadLine);
 
-    // Update the pill (also reads from the same changePct we stored)
-    ui_update_change_pill(changePct);
+            // Update the pill (also reads from the same changePct we stored)
+            ui_update_change_pill(changePct);
 
-    // Push to footer chart (USD for now)
-    if (priceChart && priceSeries) {
-      lv_chart_set_next_value(priceChart, priceSeries, (int)usd);
-      lv_chart_refresh(priceChart);
-    }
+            // Push to footer chart (USD for now)
+            if (priceChart && priceSeries) {
+              lv_chart_set_next_value(priceChart, priceSeries, (int)usd);
+              lv_chart_refresh(priceChart);
+            }
 
-} else {
-    Serial.printf("❌ Failed to fetch Bitcoin price. HTTP=%d\n", httpCode);
-}
-http.end();
-
-
-
-
-
-     // Step 2: Fetch Block Height
-http.begin("https://mempool.space/api/blocks/tip/height");
-httpCode = http.GET();
-if (httpCode == 200) {
-  String blockHeightStr = http.getString();
-
-  lastBlockHeight = blockHeightStr;
-  if (blockValueLabel) lv_label_set_text(blockValueLabel, lastBlockHeight.c_str());
-
-  long h = blockHeightStr.toInt();
-  if (h > 0) ui_update_blocks_to_million(h);
-
-  // 🔒 CACHE → shared data store
-  Cache::block.height = blockHeightStr;
-
-  Serial.printf("📏 Block Height: %ld\n", h);
-} else {
-  Serial.println("❌ Failed to fetch block height.");
-}
-http.end();
-
-
-
-     // Step 3: Fetch Fee Estimates
-      http.begin("https://mempool.space/api/v1/fees/recommended");
-      httpCode = http.GET();
-      if (httpCode == 200) {
-        String payload = http.getString();
-        DynamicJsonDocument doc(512);
-        deserializeJson(doc, payload);
-
-        // Map mempool fields → LOW/MED/HIGH
-        int high = doc["fastestFee"] | 0;                       // HIGH (red)
-        int med  = doc["halfHourFee"] | high;                   // MED  (yellow)
-        int low  = doc["economyFee"] | (doc["hourFee"] | med);  // LOW  (green)
-
-        // Keep my big label as-is (currently fastest/high)
-        char feeFormatted[16];
-        snprintf(feeFormatted, sizeof(feeFormatted), "%d sat/vB", high);
-        lastFee = feeFormatted;
-        if (feeValueLabel) lv_label_set_text(feeValueLabel, feeFormatted);
-
-
-        // 🔒 CACHE → shared data store
-        {
-          auto& f = Cache::fees;
-          f.low = low; 
-          f.med = med; 
-          f.high = high;
+        } else {
+            Serial.printf("❌ Failed to fetch Bitcoin price. HTTP=%d\n", httpCode);
         }
-
-        // NEW: update the three badges
-        ui_update_fee_badges_lmh(low, med, high);
-
-        Serial.printf("⚡ Fees — LOW:%d  MED:%d  HIGH:%d (big:%s)\n", low, med, high, feeFormatted);
-      } else {
-        Serial.printf("❌ Failed to fetch fee estimates. HTTP=%d\n", httpCode);
+        http.end();
       }
-      http.end();
 
+     // Step 2: Fetch Block Height - Try SatoNak first
+     if (!fetchHeightFromSatoNak()) {
+        Serial.println("⚠️ SatoNak height failed, trying mempool.space fallback");
+        
+        http.begin("https://mempool.space/api/blocks/tip/height");
+        int httpCode = http.GET();
+        if (httpCode == 200) {
+          String blockHeightStr = http.getString();
 
+          lastBlockHeight = blockHeightStr;
+          if (blockValueLabel) lv_label_set_text(blockValueLabel, lastBlockHeight.c_str());
 
-      // Step 4: Fetch Miner Information
-      // Get the block hash
-      String blockHash = "";
-     
-      http.begin("https://mempool.space/api/blocks/tip/hash");
-      httpCode = http.GET();
-      if (httpCode == 200) {
-          blockHash = http.getString();
-          Serial.println("🔗 Block hash: " + blockHash);
-      } else {
-          Serial.println("❌ Failed to fetch block hash!");
+          long h = blockHeightStr.toInt();
+          if (h > 0) ui_update_blocks_to_million(h);
+
+          // 🔒 CACHE → shared data store
+          Cache::block.height = blockHeightStr;
+
+          Serial.printf("📏 Block Height: %ld\n", h);
+        } else {
+          Serial.println("❌ Failed to fetch block height.");
+        }
+        http.end();
+     }
+
+     // Step 3: Fetch Fee Estimates - Try SatoNak first
+     if (!fetchFeeFromSatoNak()) {
+        Serial.println("⚠️ SatoNak fee failed, trying mempool.space fallback");
+        
+        http.begin("https://mempool.space/api/v1/fees/recommended");
+        int httpCode = http.GET();
+        if (httpCode == 200) {
+          String payload = http.getString();
+          DynamicJsonDocument doc(512);
+          deserializeJson(doc, payload);
+
+          // Map mempool fields → LOW/MED/HIGH
+          int high = doc["fastestFee"] | 0;                       // HIGH (red)
+          int med  = doc["halfHourFee"] | high;                   // MED  (yellow)
+          int low  = doc["economyFee"] | (doc["hourFee"] | med);  // LOW  (green)
+
+          // Keep my big label as-is (currently fastest/high)
+          char feeFormatted[16];
+          snprintf(feeFormatted, sizeof(feeFormatted), "%d sat/vB", high);
+          lastFee = feeFormatted;
+          if (feeValueLabel) lv_label_set_text(feeValueLabel, feeFormatted);
+
+          // 🔒 CACHE → shared data store
+          {
+            auto& f = Cache::fees;
+            f.low = low; 
+            f.med = med; 
+            f.high = high;
+          }
+
+          // NEW: update the three badges
+          ui_update_fee_badges_lmh(low, med, high);
+
+          Serial.printf("⚡ Fees — LOW:%d  MED:%d  HIGH:%d (big:%s)\n", low, med, high, feeFormatted);
+        } else {
+          Serial.printf("❌ Failed to fetch fee estimates. HTTP=%d\n", httpCode);
+        }
+        http.end();
       }
-      http.end();
+
+      // Step 4: Fetch Miner Information - Try SatoNak first  
+      if (!fetchMinerFromSatoNak()) {
+        Serial.println("⚠️ SatoNak miner failed, trying mempool.space fallback");
+        
+        // Get the block hash
+        String blockHash = "";
+       
+        http.begin("https://mempool.space/api/blocks/tip/hash");
+        int httpCode = http.GET();
+        if (httpCode == 200) {
+            blockHash = http.getString();
+            Serial.println("🔗 Block hash: " + blockHash);
+        } else {
+            Serial.println("❌ Failed to fetch block hash!");
+        }
+        http.end();
 
       // After obtaining blockHash
       if (blockHash.length()) {
