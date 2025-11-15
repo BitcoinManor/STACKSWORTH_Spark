@@ -56,6 +56,18 @@ static const char* SATONAK_ATH = "/api/ath";
 static const char* SATONAK_CHANGE24H = "/api/change24h";
 static const char* SATONAK_DAYS_SINCE_ATH = "/api/days_since_ath";
 
+// ===== World/Weather globals =====
+static String g_savedCity;
+static String g_savedTZ;     // e.g. "America/Edmonton"
+static String g_savedTopText;   // 📝 Custom top row message (max 10 chars)
+static String g_savedBottomText;// 📝 Custom bottom row message (max 10 chars)
+static String g_savedCurrency;  // 🌍 User's preferred currency (USD, EUR, etc.)
+static String g_savedTheme;     // 🎨 User's preferred theme (scroll, fade)
+static float  g_lat = 0.0f;
+static float  g_lon = 0.0f;
+
+
+
 // Default fiat (will be loaded from preferences)
 static String getCurrentFiatCode() {
   return g_savedCurrency.length() > 0 ? g_savedCurrency : "USD";
@@ -290,16 +302,6 @@ g_apName = apName;  // remember until LVGL ready
   Serial.printf("📶 AP: %s — connect and open http://192.168.4.1\n", apName.c_str());
 }
 
-
-// ===== World/Weather globals =====
-static String g_savedCity;
-static String g_savedTZ;     // e.g. "America/Edmonton"
-static String g_savedTopText;   // 📝 Custom top row message (max 10 chars)
-static String g_savedBottomText;// 📝 Custom bottom row message (max 10 chars)
-static String g_savedCurrency;  // 🌍 User's preferred currency (USD, EUR, etc.)
-static String g_savedTheme;     // 🎨 User's preferred theme (scroll, fade)
-static float  g_lat = 0.0f;
-static float  g_lon = 0.0f;
 
 
 // Map Open-Meteo weather codes (Matrix-style mapping)
@@ -632,47 +634,92 @@ lv_obj_t* portalUrlLabel = nullptr;
 
 void showPortalScreen(const String& apName) {
   if (!lv_ready) return;
-  if (portalScreen) { lv_scr_load(portalScreen); return; }
 
+  // If screen already created, just reload it
+  if (portalScreen) {
+    lv_scr_load(portalScreen);
+    return;
+  }
+
+  // ===== Create Screen =====
   portalScreen = lv_obj_create(NULL);
   lv_obj_set_style_bg_color(portalScreen, lv_color_black(), 0);
   lv_obj_set_style_bg_opa(portalScreen, LV_OPA_COVER, 0);
 
-  // Title
+  // =====================================================================
+  // 🟧 STACKSWORTH Logo (text + rectangle frame)
+  // =====================================================================
+  lv_obj_t* logoCont = lv_obj_create(portalScreen);
+  lv_obj_set_size(logoCont, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+  lv_obj_set_style_bg_opa(logoCont, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_color(logoCont, lv_color_hex(0xFCA420), 0);   // neon orange
+  lv_obj_set_style_border_width(logoCont, 4, 0);
+  lv_obj_set_style_pad_left(logoCont, 18, 0);
+  lv_obj_set_style_pad_right(logoCont, 18, 0);
+  lv_obj_set_style_pad_top(logoCont, 10, 0);
+  lv_obj_set_style_pad_bottom(logoCont, 10, 0);
+  lv_obj_align(logoCont, LV_ALIGN_TOP_MID, 0, 26);
+
+  lv_obj_t* logoLabel = lv_label_create(logoCont);
+  lv_label_set_text(logoLabel, "STACKSWORTH");
+  lv_obj_set_style_text_color(logoLabel, lv_color_white(), 0);
+  lv_obj_set_style_text_font(logoLabel, &lv_font_montserrat_24, 0);
+  lv_obj_center(logoLabel);
+
+  // =====================================================================
+  // 🧑‍💻 Cypherpunk Setup Title
+  // =====================================================================
   lv_obj_t* title = lv_label_create(portalScreen);
-  lv_label_set_text(title, "Connect to configure Wi-Fi");
-  lv_obj_set_style_text_color(title, lv_color_white(), 0);
-  lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 22);
+  lv_label_set_text(title, "Secure Setup Mode Activated");
+  lv_obj_set_style_text_color(title, lv_color_hex(0x00F5FF), 0);   // neon cyan
+  lv_obj_set_style_text_font(title, &lv_font_montserrat_22, 0);
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 110);
 
-  // Spinner (nice “working” hint)
-  lv_obj_t* spin = lv_spinner_create(portalScreen, 1000, 90);
-  lv_obj_set_size(spin, 48, 48);
-  lv_obj_align(spin, LV_ALIGN_TOP_MID, 0, 64);
+  // =====================================================================
+  // Instructions
+  // =====================================================================
+  lv_obj_t* info = lv_label_create(portalScreen);
+  lv_label_set_text(info,
+      "Connect to the Wi-Fi network shown below\n"
+      "to configure your Spark device.");
+  lv_obj_set_style_text_color(info, lv_color_white(), 0);
+  lv_obj_set_style_text_align(info, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_font(info, &lv_font_montserrat_18, 0);
+  lv_obj_align(info, LV_ALIGN_TOP_MID, 0, 150);
 
-  // AP name
-  portalNetLabel = lv_label_create(portalScreen);
-  lv_label_set_text_fmt(portalNetLabel, "Network: %s", apName.c_str());
-  lv_obj_set_style_text_color(portalNetLabel, lv_color_white(), 0);
-  lv_obj_set_style_text_align(portalNetLabel, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_align(portalNetLabel, LV_ALIGN_CENTER, 0, -6);
+  // =====================================================================
+  // 📡 AP NAME (big cyan)
+  // =====================================================================
+  lv_obj_t* apLabel = lv_label_create(portalScreen);
+  lv_label_set_text_fmt(apLabel, "%s", apName.c_str());
+  lv_obj_set_style_text_color(apLabel, lv_color_hex(0x00F5FF), 0);    // neon cyan
+  lv_obj_set_style_text_font(apLabel, &lv_font_montserrat_28, 0);
+  lv_obj_align(apLabel, LV_ALIGN_TOP_MID, 0, 215);
 
-  // URL (AP IP is 192.168.4.1 by default)
-  portalUrlLabel = lv_label_create(portalScreen);
-  lv_label_set_text(portalUrlLabel, "If portal doesn’t auto-open:\nhttp://192.168.4.1");
-  lv_obj_set_style_text_color(portalUrlLabel, lv_color_white(), 0);
-  lv_obj_set_style_text_align(portalUrlLabel, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_align(portalUrlLabel, LV_ALIGN_CENTER, 0, 28);
+  // =====================================================================
+  // URL instructions
+  // =====================================================================
+  lv_obj_t* urlLabel = lv_label_create(portalScreen);
+  lv_label_set_text(urlLabel,
+      "If the portal doesn't open automatically,\n"
+      "go to: http://192.168.4.1");
+  lv_obj_set_style_text_color(urlLabel, lv_color_white(), 0);
+  lv_obj_set_style_text_align(urlLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_font(urlLabel, &lv_font_montserrat_18, 0);
+  lv_obj_align(urlLabel, LV_ALIGN_TOP_MID, 0, 270);
 
-  // Small hint at bottom
-  lv_obj_t* hint = lv_label_create(portalScreen);
-  lv_label_set_text(hint, "Open Wi-Fi settings → join the network above.");
-  lv_obj_set_style_text_color(hint, lv_color_white(), 0);
-  lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -18);
+  // =====================================================================
+  // Spinner (Neon Cyan)
+  // =====================================================================
+  lv_obj_t* spin = lv_spinner_create(portalScreen, 1000, 120);
+  lv_obj_set_size(spin, 55, 55);
+  lv_obj_set_style_arc_color(spin, lv_color_hex(0x00F5FF), 0);    // neon cyan
+  lv_obj_set_style_arc_width(spin, 4, 0);
+  lv_obj_align(spin, LV_ALIGN_BOTTOM_MID, 0, -40);
 
   lv_scr_load(portalScreen);
 }
+
 
 // ===== SatoNak API Functions =====
 
