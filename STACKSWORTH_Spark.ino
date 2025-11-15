@@ -66,6 +66,11 @@ static String g_savedTheme;     // 🎨 User's preferred theme (scroll, fade)
 static float  g_lat = 0.0f;
 static float  g_lon = 0.0f;
 
+// ===== Cached display values (persisted between screens) =====
+String lastPrice      = "";
+String lastFee        = "";
+String lastBlockHeight = "";
+String lastMiner      = "";
 
 
 // Default fiat (will be loaded from preferences)
@@ -622,15 +627,6 @@ lv_obj_t* portalUrlLabel = nullptr;
  //int lastBlockHeight = 0;
 
 
- 
-
- // 🌐 Cached values for display labels (prevent flicker / uploading state)
- String lastPrice = "…";            // Show loading dots initially
- String lastFee = "…";
- String lastBlockHeight = "…";
- String lastMiner = "…";
-
-
 
 void showPortalScreen(const String& apName) {
   if (!lv_ready) return;
@@ -663,7 +659,7 @@ void showPortalScreen(const String& apName) {
   lv_obj_t* logoLabel = lv_label_create(logoCont);
   lv_label_set_text(logoLabel, "STACKSWORTH");
   lv_obj_set_style_text_color(logoLabel, lv_color_white(), 0);
-  lv_obj_set_style_text_font(logoLabel, &lv_font_montserrat_24, 0);
+  lv_obj_set_style_text_font(logoLabel, &lv_font_montserrat_26, 0);
   lv_obj_center(logoLabel);
 
   // =====================================================================
@@ -672,7 +668,7 @@ void showPortalScreen(const String& apName) {
   lv_obj_t* title = lv_label_create(portalScreen);
   lv_label_set_text(title, "Secure Setup Mode Activated");
   lv_obj_set_style_text_color(title, lv_color_hex(0x00F5FF), 0);   // neon cyan
-  lv_obj_set_style_text_font(title, &lv_font_montserrat_22, 0);
+  lv_obj_set_style_text_font(title, &lv_font_montserrat_26, 0);
   lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 110);
 
   // =====================================================================
@@ -684,7 +680,7 @@ void showPortalScreen(const String& apName) {
       "to configure your Spark device.");
   lv_obj_set_style_text_color(info, lv_color_white(), 0);
   lv_obj_set_style_text_align(info, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_font(info, &lv_font_montserrat_18, 0);
+  lv_obj_set_style_text_font(info, &lv_font_montserrat_16, 0);
   lv_obj_align(info, LV_ALIGN_TOP_MID, 0, 150);
 
   // =====================================================================
@@ -705,7 +701,7 @@ void showPortalScreen(const String& apName) {
       "go to: http://192.168.4.1");
   lv_obj_set_style_text_color(urlLabel, lv_color_white(), 0);
   lv_obj_set_style_text_align(urlLabel, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_font(urlLabel, &lv_font_montserrat_18, 0);
+  lv_obj_set_style_text_font(urlLabel, &lv_font_montserrat_16, 0);
   lv_obj_align(urlLabel, LV_ALIGN_TOP_MID, 0, 270);
 
   // =====================================================================
@@ -1162,11 +1158,11 @@ bool fetchFeeFromSatoNak() {
       } else {
           Serial.println("⚠️ Invalid block hash. Skipping coinbase lookup.");
       }
+      } // Close the missing brace for "if (blockHash != "") {"
   } else {
       Serial.println("❌ WiFi not connected!");
   }
 }
-
 
 static void fetch_hashrate_and_diff() {
   if (WiFi.status() != WL_CONNECTED) return;
@@ -1632,9 +1628,7 @@ if (millis() - t2 > 1800000UL) {
   }
   t2 = millis();
 }
-
-}
- 
+} 
  // --------------------------------------------------
  // 🚀 STACKSWORTH Spark – Engine Activated
  // Built with love, glow effects, and 🍊 coin self-sovereignty
