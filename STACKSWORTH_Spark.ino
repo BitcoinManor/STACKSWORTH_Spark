@@ -2,7 +2,7 @@
  *  STACKSWORTH Spark – "mainScreen" UI
  *  --------------------------------------------------
  *  Project     : STACKSWORTH Spark Firmware
- *  Version     : v0.0.5
+ *  Version     : v0.0.4
  *  Device      : ESP32-S3 Waveshare 7" Touchscreen (800x480)
  *  Description : Modular Bitcoin Dashboard UI using LVGL
  *  Designer    : Bitcoin Manor 🟧
@@ -637,81 +637,142 @@ void showPortalScreen(const String& apName) {
     return;
   }
 
-  // ===== Create Screen =====
+  // ===== Create Screen using proper theme architecture =====
   portalScreen = lv_obj_create(NULL);
+  
+  // Apply the same root background as main screens
   lv_obj_set_style_bg_color(portalScreen, lv_color_black(), 0);
   lv_obj_set_style_bg_opa(portalScreen, LV_OPA_COVER, 0);
 
   // =====================================================================
-  // 🟧 STACKSWORTH Logo (text + rectangle frame)
+  // 🟧 STACKSWORTH Header (same style as main screen)
   // =====================================================================
-  lv_obj_t* logoCont = lv_obj_create(portalScreen);
-  lv_obj_set_size(logoCont, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-  lv_obj_set_style_bg_opa(logoCont, LV_OPA_TRANSP, 0);
-  lv_obj_set_style_border_color(logoCont, lv_color_hex(0xFCA420), 0);   // neon orange
-  lv_obj_set_style_border_width(logoCont, 4, 0);
-  lv_obj_set_style_pad_left(logoCont, 18, 0);
-  lv_obj_set_style_pad_right(logoCont, 18, 0);
-  lv_obj_set_style_pad_top(logoCont, 10, 0);
-  lv_obj_set_style_pad_bottom(logoCont, 10, 0);
-  lv_obj_align(logoCont, LV_ALIGN_TOP_MID, 0, 26);
+  lv_obj_t* stacksworthLabel = lv_label_create(portalScreen);
+  lv_label_set_text(stacksworthLabel, "STACKSWORTH");
+  lv_obj_set_style_text_color(stacksworthLabel, lv_color_hex(0xFCA420), 0);
+  lv_obj_set_style_text_font(stacksworthLabel, &lv_font_montserrat_20, 0);
+  lv_obj_align(stacksworthLabel, LV_ALIGN_TOP_LEFT, 25, 10);
 
-  lv_obj_t* logoLabel = lv_label_create(logoCont);
-  lv_label_set_text(logoLabel, "STACKSWORTH");
-  lv_obj_set_style_text_color(logoLabel, lv_color_white(), 0);
-  lv_obj_set_style_text_font(logoLabel, &lv_font_montserrat_26, 0);
-  lv_obj_center(logoLabel);
+  lv_obj_t* sparkLabel = lv_label_create(portalScreen);
+  lv_label_set_text(sparkLabel, "// SPARK");
+  lv_obj_set_style_text_color(sparkLabel, lv_color_hex(0xFFFFFF), 0);
+  lv_obj_set_style_text_font(sparkLabel, &lv_font_montserrat_20, 0);
+  lv_obj_align(sparkLabel, LV_ALIGN_TOP_LEFT, 190, 10);
 
   // =====================================================================
-  // 🧑‍💻 Cypherpunk Setup Title
+  // Main Content Container (centered layout)
   // =====================================================================
-  lv_obj_t* title = lv_label_create(portalScreen);
-  lv_label_set_text(title, "Secure Setup Mode Activated");
-  lv_obj_set_style_text_color(title, lv_color_hex(0x00F5FF), 0);   // neon cyan
-  lv_obj_set_style_text_font(title, &lv_font_montserrat_26, 0);
-  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 110);
+  lv_obj_t* mainCont = lv_obj_create(portalScreen);
+  lv_obj_set_size(mainCont, 700, 350);  // Professional size
+  lv_obj_set_style_bg_color(mainCont, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(mainCont, LV_OPA_TRANSP, 0);  // Transparent background
+  lv_obj_set_style_border_width(mainCont, 0, 0);  // No border
+  lv_obj_set_style_pad_all(mainCont, 0, 0);
+  lv_obj_align(mainCont, LV_ALIGN_CENTER, 0, 0);
+  
+  // Use flexbox layout like main screens
+  lv_obj_set_flex_flow(mainCont, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(mainCont, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_style_pad_gap(mainCont, 20, 0);
 
   // =====================================================================
-  // Instructions
+  // � Security Status Card
   // =====================================================================
-  lv_obj_t* info = lv_label_create(portalScreen);
-  lv_label_set_text(info,
-      "Connect to the Wi-Fi network shown below\n"
-      "to configure your Spark device.");
-  lv_obj_set_style_text_color(info, lv_color_white(), 0);
-  lv_obj_set_style_text_align(info, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_font(info, &lv_font_montserrat_16, 0);
-  lv_obj_align(info, LV_ALIGN_TOP_MID, 0, 150);
+  lv_obj_t* statusCard = lv_obj_create(mainCont);
+  lv_obj_set_size(statusCard, 600, LV_SIZE_CONTENT);
+  lv_obj_set_style_bg_color(statusCard, lv_color_hex(0x1A1A1A), 0);
+  lv_obj_set_style_bg_opa(statusCard, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_color(statusCard, lv_color_hex(0x00F5FF), 0);
+  lv_obj_set_style_border_width(statusCard, 2, 0);
+  lv_obj_set_style_radius(statusCard, 12, 0);
+  lv_obj_set_style_pad_all(statusCard, 20, 0);
+
+  // Security icon and title
+  lv_obj_t* securityTitle = lv_label_create(statusCard);
+  lv_label_set_text(securityTitle, "🔒 Secure Setup Mode");
+  lv_obj_set_style_text_color(securityTitle, lv_color_hex(0x00F5FF), 0);
+  lv_obj_set_style_text_font(securityTitle, &lv_font_montserrat_22, 0);
+  lv_obj_set_style_text_align(securityTitle, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(securityTitle, LV_ALIGN_TOP_MID, 0, 0);
+
+  lv_obj_t* statusDesc = lv_label_create(statusCard);
+  lv_label_set_text(statusDesc, "Device ready for configuration");
+  lv_obj_set_style_text_color(statusDesc, lv_color_white(), 0);
+  lv_obj_set_style_text_font(statusDesc, &lv_font_montserrat_16, 0);
+  lv_obj_set_style_text_align(statusDesc, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(statusDesc, LV_ALIGN_TOP_MID, 0, 35);
 
   // =====================================================================
-  // 📡 AP NAME (big cyan)
+  // 📡 Network Connection Card
   // =====================================================================
-  lv_obj_t* apLabel = lv_label_create(portalScreen);
-  lv_label_set_text_fmt(apLabel, "%s", apName.c_str());
-  lv_obj_set_style_text_color(apLabel, lv_color_hex(0x00F5FF), 0);    // neon cyan
-  lv_obj_set_style_text_font(apLabel, &lv_font_montserrat_28, 0);
-  lv_obj_align(apLabel, LV_ALIGN_TOP_MID, 0, 215);
+  lv_obj_t* networkCard = lv_obj_create(mainCont);
+  lv_obj_set_size(networkCard, 600, LV_SIZE_CONTENT);
+  lv_obj_set_style_bg_color(networkCard, lv_color_hex(0x2A2A2A), 0);
+  lv_obj_set_style_bg_opa(networkCard, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_color(networkCard, lv_color_hex(0xFCA420), 0);
+  lv_obj_set_style_border_width(networkCard, 2, 0);
+  lv_obj_set_style_radius(networkCard, 12, 0);
+  lv_obj_set_style_pad_all(networkCard, 20, 0);
+
+  lv_obj_t* networkTitle = lv_label_create(networkCard);
+  lv_label_set_text(networkTitle, "📡 Connect to Wi-Fi Network:");
+  lv_obj_set_style_text_color(networkTitle, lv_color_white(), 0);
+  lv_obj_set_style_text_font(networkTitle, &lv_font_montserrat_18, 0);
+  lv_obj_set_style_text_align(networkTitle, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(networkTitle, LV_ALIGN_TOP_MID, 0, 0);
+
+  // Network name (prominent)
+  lv_obj_t* apNameLabel = lv_label_create(networkCard);
+  lv_label_set_text_fmt(apNameLabel, "%s", apName.c_str());
+  lv_obj_set_style_text_color(apNameLabel, lv_color_hex(0xFCA420), 0);
+  lv_obj_set_style_text_font(apNameLabel, &lv_font_montserrat_26, 0);
+  lv_obj_set_style_text_align(apNameLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(apNameLabel, LV_ALIGN_TOP_MID, 0, 35);
 
   // =====================================================================
-  // URL instructions
+  // 🌐 Portal Access Card
   // =====================================================================
-  lv_obj_t* urlLabel = lv_label_create(portalScreen);
-  lv_label_set_text(urlLabel,
-      "If the portal doesn't open automatically,\n"
-      "go to: http://192.168.4.1");
-  lv_obj_set_style_text_color(urlLabel, lv_color_white(), 0);
-  lv_obj_set_style_text_align(urlLabel, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_font(urlLabel, &lv_font_montserrat_16, 0);
-  lv_obj_align(urlLabel, LV_ALIGN_TOP_MID, 0, 270);
+  lv_obj_t* portalCard = lv_obj_create(mainCont);
+  lv_obj_set_size(portalCard, 600, LV_SIZE_CONTENT);
+  lv_obj_set_style_bg_color(portalCard, lv_color_hex(0x1A1A1A), 0);
+  lv_obj_set_style_bg_opa(portalCard, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_color(portalCard, lv_color_hex(0x555555), 0);
+  lv_obj_set_style_border_width(portalCard, 1, 0);
+  lv_obj_set_style_radius(portalCard, 12, 0);
+  lv_obj_set_style_pad_all(portalCard, 20, 0);
+
+  lv_obj_t* portalInfo = lv_label_create(portalCard);
+  lv_label_set_text(portalInfo, 
+    "Setup portal will open automatically\n"
+    "Or manually visit: http://192.168.4.1");
+  lv_obj_set_style_text_color(portalInfo, lv_color_white(), 0);
+  lv_obj_set_style_text_font(portalInfo, &lv_font_montserrat_16, 0);
+  lv_obj_set_style_text_align(portalInfo, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_center(portalInfo);
 
   // =====================================================================
-  // Spinner (Neon Cyan)
+  // Bottom Status Indicator
   // =====================================================================
-  lv_obj_t* spin = lv_spinner_create(portalScreen, 1000, 120);
-  lv_obj_set_size(spin, 55, 55);
-  lv_obj_set_style_arc_color(spin, lv_color_hex(0x00F5FF), 0);    // neon cyan
-  lv_obj_set_style_arc_width(spin, 4, 0);
-  lv_obj_align(spin, LV_ALIGN_BOTTOM_MID, 0, -40);
+  lv_obj_t* statusCont = lv_obj_create(portalScreen);
+  lv_obj_set_size(statusCont, 200, 50);
+  lv_obj_set_style_bg_color(statusCont, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(statusCont, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(statusCont, 0, 0);
+  lv_obj_set_style_pad_all(statusCont, 0, 0);
+  lv_obj_align(statusCont, LV_ALIGN_BOTTOM_MID, 0, -20);
+  
+  // Activity indicator (spinner)
+  lv_obj_t* spinner = lv_spinner_create(statusCont, 1000, 90);
+  lv_obj_set_size(spinner, 30, 30);
+  lv_obj_set_style_arc_color(spinner, lv_color_hex(0x00F5FF), 0);
+  lv_obj_set_style_arc_width(spinner, 3, 0);
+  lv_obj_align(spinner, LV_ALIGN_LEFT_MID, 0, 0);
+
+  lv_obj_t* statusText = lv_label_create(statusCont);
+  lv_label_set_text(statusText, "Waiting for setup...");
+  lv_obj_set_style_text_color(statusText, lv_color_hex(0x00F5FF), 0);
+  lv_obj_set_style_text_font(statusText, &lv_font_montserrat_14, 0);
+  lv_obj_align(statusText, LV_ALIGN_LEFT_MID, 40, 0);
 
   lv_scr_load(portalScreen);
 }
@@ -1326,6 +1387,7 @@ static void fetch_block_intervals_footer() {
 void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
   Serial.println(F("[chart] Fetching 24h prices…"));
   HTTPClient http;
+  http.setTimeout(5000);  // 5 second timeout
   http.begin("https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=1");
   int httpCode = http.GET();
   Serial.printf("[chart] HTTP: %d\n", httpCode);
@@ -1337,6 +1399,8 @@ void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
 
   String payload = http.getString();
   http.end();
+  
+  yield(); // Feed watchdog after network operation
 
   DynamicJsonDocument doc(16384);
   DeserializationError err = deserializeJson(doc, payload);
@@ -1345,6 +1409,8 @@ void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
     Serial.println(err.c_str());
     return;
   }
+  
+  yield(); // Feed watchdog after JSON parsing
 
   JsonArray prices = doc["prices"];
   // ADDED: grab last 24h volume (USD)
@@ -1354,6 +1420,7 @@ void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
     volLast = volsArr[volsArr.size()-1][1] | 0.0f;
   }
   
+  yield(); // Feed watchdog after array access
   
   size_t n = prices.size();
   Serial.printf("[chart] points available: %u\n", (unsigned)n);
@@ -1376,10 +1443,14 @@ void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
       // Footer chart gets the actual price values
       lv_chart_set_value_by_id(chart, series, i, (lv_coord_t)p);
     }
+    
+    // Feed watchdog every few iterations to prevent timeout
+    if (i % 8 == 0) yield();
   }
 
 // ADDED: update 24h stat pills
   ui_update_24h_stats(minv, maxv, volLast);
+  yield(); // Feed watchdog after UI update
   
 
   // 2) Footer chart: apply a little padding so the line isn't touching edges
@@ -1390,6 +1461,7 @@ void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
                        (lv_coord_t)(minv - pad),
                        (lv_coord_t)(maxv + pad));
     lv_chart_refresh(chart);
+    yield(); // Feed watchdog after chart operations
   }
 
   // 3) Mini sparkline: normalize to 0..100 and push into priceSeriesMini
@@ -1399,9 +1471,15 @@ void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
       float p = prices[idx][1];
       float y = (maxv > minv) ? ( (p - minv) * 100.0f / (maxv - minv) ) : 50.0f;
       lv_chart_set_value_by_id(priceChartMini, priceSeriesMini, i, (lv_coord_t)y);
+      
+      // Feed watchdog every few iterations
+      if (i % 8 == 0) yield();
     }
     lv_chart_refresh(priceChartMini);
+    yield(); // Feed watchdog after mini chart
   }
+  
+  // 4) Update cache - split into smaller chunks to avoid watchdog timeout
   {
   auto& ch = Cache::chart;
   const int targetPts = 24;   // make sure this matches your DataStore array sizes
@@ -1413,13 +1491,18 @@ void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
 
     ch.points[i] = pY;   // footer chart (USD)
     ch.mini[i]   = y;    // mini sparkline (0..100)
+    
+    // Feed watchdog every few iterations
+    if (i % 8 == 0) yield();
   }
 
   ch.low  = minv;
   ch.high = maxv;
   ch.volUsd  = volLast;
   ch.valid = true;
-}
+  }
+  
+  Serial.println("[chart] Processing complete");
 }
 
 
@@ -1576,19 +1659,20 @@ ui_weather_set_time(String());
      if (portalModeActive) {
     dns.processNextRequest();   // keep the captive portal DNS responsive
   }
+  
    static unsigned long lastUpdate = 0;
    if (millis() - lastUpdate > 30000) {
      fetchBitcoinData();
+     yield(); // Feed watchdog after data fetch
      lastUpdate = millis();
    }
-   //delay(1000);
 
 static unsigned long t_hash = 0, t_blocks = 0, t_meta = 0;
 unsigned long nowMs = millis();
 
-if (nowMs - t_hash   > 30000UL) { fetch_hashrate_and_diff();   t_hash = nowMs; }
-if (nowMs - t_blocks > 30000UL) { fetch_block_intervals_footer(); t_blocks = nowMs; }
-if (nowMs - t_meta   > 120000UL){ fetch_market_meta();          t_meta = nowMs; }
+if (nowMs - t_hash   > 30000UL) { fetch_hashrate_and_diff();   t_hash = nowMs; yield(); }
+if (nowMs - t_blocks > 30000UL) { fetch_block_intervals_footer(); t_blocks = nowMs; yield(); }
+if (nowMs - t_meta   > 120000UL){ fetch_market_meta();          t_meta = nowMs; yield(); }
 
 
 
