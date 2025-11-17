@@ -628,41 +628,36 @@ lv_obj_t* portalUrlLabel = nullptr;
 
 
 
-void showPortalScreen(const String& apName) {
-  if (!lv_ready) return;
-
-  // If screen already created, just reload it
-  if (portalScreen) {
-    lv_scr_load(portalScreen);
-    return;
-  }
-
-  // ===== Create Screen using proper theme architecture =====
-  portalScreen = lv_obj_create(NULL);
-  
-  // Apply the same root background as main screens
-  lv_obj_set_style_bg_color(portalScreen, lv_color_black(), 0);
-  lv_obj_set_style_bg_opa(portalScreen, LV_OPA_COVER, 0);
+lv_obj_t* create_portalScreen(const String& apName) {
+  lv_obj_t* scr = lv_obj_create(NULL);
+  ui::apply_root_bg(scr);                        // apply theme background (full screen black)
 
   // =====================================================================
-  // 🟧 STACKSWORTH Header (same style as main screen)
+  // 🟧 STACKSWORTH Header 
   // =====================================================================
-  lv_obj_t* stacksworthLabel = lv_label_create(portalScreen);
-  lv_label_set_text(stacksworthLabel, "STACKSWORTH");
-  lv_obj_set_style_text_color(stacksworthLabel, lv_color_hex(0xFCA420), 0);
-  lv_obj_set_style_text_font(stacksworthLabel, &lv_font_montserrat_20, 0);
-  lv_obj_align(stacksworthLabel, LV_ALIGN_TOP_LEFT, 25, 10);
+  lv_obj_t* blokdbitLabel = lv_label_create(scr);
+  lv_label_set_text(blokdbitLabel, "STACKSWORTH");
+  lv_obj_set_style_text_color(blokdbitLabel, lv_color_hex(0xFCA420), 0);
+  lv_obj_set_style_text_font(blokdbitLabel, &lv_font_montserrat_20, 0);
+  lv_obj_align(blokdbitLabel, LV_ALIGN_TOP_LEFT, 25, 10);
 
-  lv_obj_t* sparkLabel = lv_label_create(portalScreen);
+  lv_obj_t* sparkLabel = lv_label_create(scr);
   lv_label_set_text(sparkLabel, "// SPARK");
   lv_obj_set_style_text_color(sparkLabel, lv_color_hex(0xFFFFFF), 0);
   lv_obj_set_style_text_font(sparkLabel, &lv_font_montserrat_20, 0);
   lv_obj_align(sparkLabel, LV_ALIGN_TOP_LEFT, 190, 10);
 
+
+  lv_obj_t* inf = lv_label_create(scr);
+  lv_label_set_text(inf, "SPARK v1.1.1");
+  lv_obj_set_style_text_color(inf, lv_color_hex(0xFFFFFF), 0);
+  lv_obj_set_style_text_font(inf, &lv_font_montserrat_16, 0);
+  lv_obj_align(inf, LV_ALIGN_BOTTOM_RIGHT, -60, 0);
+
   // =====================================================================
   // Main Content Container (centered layout)
   // =====================================================================
-  lv_obj_t* mainCont = lv_obj_create(portalScreen);
+  lv_obj_t* mainCont = lv_obj_create(scr);
   lv_obj_set_size(mainCont, 700, 350);  // Professional size
   lv_obj_set_style_bg_color(mainCont, lv_color_black(), 0);
   lv_obj_set_style_bg_opa(mainCont, LV_OPA_TRANSP, 0);  // Transparent background
@@ -676,10 +671,10 @@ void showPortalScreen(const String& apName) {
   lv_obj_set_style_pad_gap(mainCont, 20, 0);
 
   // =====================================================================
-  // � Security Status Card
+  // 🛡 Security Status Card
   // =====================================================================
   lv_obj_t* statusCard = lv_obj_create(mainCont);
-  lv_obj_set_size(statusCard, 600, LV_SIZE_CONTENT);
+  lv_obj_set_size(statusCard, 400, LV_SIZE_CONTENT);
   lv_obj_set_style_bg_color(statusCard, lv_color_hex(0x1A1A1A), 0);
   lv_obj_set_style_bg_opa(statusCard, LV_OPA_COVER, 0);
   lv_obj_set_style_border_color(statusCard, lv_color_hex(0x00F5FF), 0);
@@ -687,16 +682,16 @@ void showPortalScreen(const String& apName) {
   lv_obj_set_style_radius(statusCard, 12, 0);
   lv_obj_set_style_pad_all(statusCard, 20, 0);
 
-  // Security icon and title
+  // STACKSWORTHitle
   lv_obj_t* securityTitle = lv_label_create(statusCard);
-  lv_label_set_text(securityTitle, "🔒 Secure Setup Mode");
+  lv_label_set_text(securityTitle, "STACKSWORTH");
   lv_obj_set_style_text_color(securityTitle, lv_color_hex(0x00F5FF), 0);
-  lv_obj_set_style_text_font(securityTitle, &lv_font_montserrat_22, 0);
+  lv_obj_set_style_text_font(securityTitle, &lv_font_montserrat_48, 0);
   lv_obj_set_style_text_align(securityTitle, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_align(securityTitle, LV_ALIGN_TOP_MID, 0, 0);
 
   lv_obj_t* statusDesc = lv_label_create(statusCard);
-  lv_label_set_text(statusDesc, "Device ready for configuration");
+  lv_label_set_text(statusDesc, "Where Data Comes To Life");
   lv_obj_set_style_text_color(statusDesc, lv_color_white(), 0);
   lv_obj_set_style_text_font(statusDesc, &lv_font_montserrat_16, 0);
   lv_obj_set_style_text_align(statusDesc, LV_TEXT_ALIGN_CENTER, 0);
@@ -717,7 +712,7 @@ void showPortalScreen(const String& apName) {
   lv_obj_t* networkTitle = lv_label_create(networkCard);
   lv_label_set_text(networkTitle, "📡 Connect to Wi-Fi Network:");
   lv_obj_set_style_text_color(networkTitle, lv_color_white(), 0);
-  lv_obj_set_style_text_font(networkTitle, &lv_font_montserrat_18, 0);
+  lv_obj_set_style_text_font(networkTitle, &lv_font_montserrat_20, 0);
   lv_obj_set_style_text_align(networkTitle, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_align(networkTitle, LV_ALIGN_TOP_MID, 0, 0);
 
@@ -753,7 +748,7 @@ void showPortalScreen(const String& apName) {
   // =====================================================================
   // Bottom Status Indicator
   // =====================================================================
-  lv_obj_t* statusCont = lv_obj_create(portalScreen);
+  lv_obj_t* statusCont = lv_obj_create(scr);
   lv_obj_set_size(statusCont, 200, 50);
   lv_obj_set_style_bg_color(statusCont, lv_color_black(), 0);
   lv_obj_set_style_bg_opa(statusCont, LV_OPA_TRANSP, 0);
@@ -774,6 +769,20 @@ void showPortalScreen(const String& apName) {
   lv_obj_set_style_text_font(statusText, &lv_font_montserrat_14, 0);
   lv_obj_align(statusText, LV_ALIGN_LEFT_MID, 40, 0);
 
+  return scr;
+}
+
+void showPortalScreen(const String& apName) {
+  if (!lv_ready) return;
+
+  // If screen already created, just reload it
+  if (portalScreen) {
+    lv_scr_load(portalScreen);
+    return;
+  }
+
+  // Create and load the portal screen
+  portalScreen = create_portalScreen(apName);
   lv_scr_load(portalScreen);
 }
 
@@ -1219,7 +1228,7 @@ bool fetchFeeFromSatoNak() {
       } else {
           Serial.println("⚠️ Invalid block hash. Skipping coinbase lookup.");
       }
-      } // Close the missing brace for "if (blockHash != "") {"
+      } // End of miner fetch from SatoNak fallback
   } else {
       Serial.println("❌ WiFi not connected!");
   }
