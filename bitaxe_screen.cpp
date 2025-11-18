@@ -79,199 +79,147 @@ static lv_obj_t* make_orange_card(lv_obj_t* parent, const char* title) {
 
 lv_obj_t* create_bitaxe_screen() {
   lv_obj_t* scr = lv_obj_create(NULL);
- 
- axe_apply_bg(scr);  // uses tokens.bg
 
-/* 
-  // Title label
+  axe_apply_bg(scr);  // uses tokens.bg
 
-  lv_obj_t* blokdbitLabel = lv_label_create(scr);
-  lv_label_set_text(blokdbitLabel, "STACKSWORTH");
-  lv_obj_set_style_text_color(blokdbitLabel, lv_color_hex(axe::color::accent), 0);
-  lv_obj_set_style_text_font(blokdbitLabel, &lv_font_montserrat_20, 0);
-  lv_obj_align(blokdbitLabel, LV_ALIGN_TOP_LEFT, axe::spacing::md + 9, axe::spacing::sm + 2);
-
-  lv_obj_t* sparkLabel = lv_label_create(scr);
-  lv_label_set_text(sparkLabel, "// SPARK");
-  lv_obj_set_style_text_color(sparkLabel, lv_color_hex(axe::color::text), 0);
-  lv_obj_set_style_text_font(sparkLabel, &lv_font_montserrat_20, 0);
-  lv_obj_align(sparkLabel, LV_ALIGN_TOP_LEFT, 190, axe::spacing::sm + 2);
-
-     ??Old Title Label
-  lv_obj_t* bitaxeLabel = lv_label_create(scr);
-  lv_label_set_text(bitaxeLabel, "Bitaxe Hub");
-  lv_obj_set_style_text_color(bitaxeLabel, lv_color_hex(0xFCA420), 0);
-  lv_obj_set_style_text_font(bitaxeLabel, &lv_font_montserrat_20, 0);
-  lv_obj_align(bitaxeLabel, LV_ALIGN_TOP_RIGHT, -25, 10);
-
-    //old Footer
-  lv_obj_t* inf = lv_label_create(scr);
-  lv_label_set_text(inf, "SPARK v0.0.3");
-  lv_obj_set_style_text_color(inf, lv_color_hex(0xFFFFFF), 0);
-  lv_obj_set_style_text_font(inf, &lv_font_montserrat_16, 0);
-  lv_obj_align(inf, LV_ALIGN_BOTTOM_RIGHT, -60, 0); 
-   */
-
-  
   // Header: STACKSWORTH // SPARK (tokenized colors)
-lv_obj_t* lblStacksworth = lv_label_create(scr);
-lv_label_set_text(lblStacksworth, "STACKSWORTH");
-lv_obj_set_style_text_color(lblStacksworth, lv_color_hex(axe::brand::orange), 0);
-lv_obj_set_style_text_font(lblStacksworth, &lv_font_montserrat_20, 0);
-//lv_obj_align(lblStacksworth, LV_ALIGN_TOP_LEFT, 25, 10);
-lv_obj_align(lblStacksworth, LV_ALIGN_TOP_LEFT, axe::spacing::lg, axe::spacing::sm + 2);
+  lv_obj_t* lblStacksworth = lv_label_create(scr);
+  lv_label_set_text(lblStacksworth, "STACKSWORTH");
+  lv_obj_set_style_text_color(lblStacksworth, lv_color_hex(axe::brand::orange), 0);
+  lv_obj_set_style_text_font(lblStacksworth, &lv_font_montserrat_20, 0);
+  lv_obj_align(lblStacksworth, LV_ALIGN_TOP_LEFT, axe::spacing::lg, axe::spacing::sm + 2);
 
-lv_obj_t* lblSpark = lv_label_create(scr);
-lv_label_set_text(lblSpark, "// SPARK");
-lv_obj_set_style_text_color(lblSpark, lv_color_hex(axe::color::text), 0);
-lv_obj_set_style_text_font(lblSpark, &lv_font_montserrat_20, 0);
-//lv_obj_align(lblSpark, LV_ALIGN_TOP_LEFT, 190, 10);
-lv_obj_align(lblSpark, LV_ALIGN_TOP_LEFT, axe::spacing::md + 175, axe::spacing::sm + 2);
+  lv_obj_t* lblSpark = lv_label_create(scr);
+  lv_label_set_text(lblSpark, "// SPARK");
+  lv_obj_set_style_text_color(lblSpark, lv_color_hex(axe::color::text), 0);
+  lv_obj_set_style_text_font(lblSpark, &lv_font_montserrat_20, 0);
+  lv_obj_align(lblSpark, LV_ALIGN_TOP_LEFT, axe::spacing::md + 175, axe::spacing::sm + 2);
 
-/*  //My way that looks good
-// Top-right title (tokenized)
-lv_obj_t* lblAxeStack = lv_label_create(scr);
-lv_label_set_text(lblAxeStack, "AxeStack");
-lv_obj_set_style_text_color(lblAxeStack, lv_color_hex(axe::brand::orange), 0);  
-lv_obj_set_style_text_font(lblAxeStack, &lv_font_montserrat_20, 0);             
-lv_obj_align(lblAxeStack, LV_ALIGN_TOP_RIGHT, -140, 10);
+  // Top-right title: AxeStack \\ Bitaxe Hub
+  lv_obj_t* lblBitaxe = lv_label_create(scr);
+  lv_label_set_text(lblBitaxe, " \\\\ Bitaxe Hub");   // shows as "\\ Bitaxe Hub"
+  lv_obj_set_style_text_color(lblBitaxe, lv_color_hex(axe::color::text), 0);
+  lv_obj_set_style_text_font(lblBitaxe, &lv_font_montserrat_20, 0);
+  lv_obj_align(lblBitaxe, LV_ALIGN_TOP_RIGHT, -axe::spacing::xl, axe::spacing::sm + 2);
 
+  lv_obj_t* lblAxeStack = lv_label_create(scr);
+  lv_label_set_text(lblAxeStack, "AxeStack");
+  lv_obj_set_style_text_color(lblAxeStack, lv_color_hex(axe::brand::orange), 0);
+  lv_obj_set_style_text_font(lblAxeStack, &lv_font_montserrat_20, 0);
+  lv_obj_align_to(lblAxeStack, lblBitaxe, LV_ALIGN_OUT_LEFT_MID, -axe::spacing::xs - 2, 0);
 
-lv_obj_t* lblBitaxe = lv_label_create(scr);
-lv_label_set_text(lblBitaxe, " \\\\ Bitaxe Hub");
-lv_obj_set_style_text_color(lblBitaxe, lv_color_hex(axe::color::text), 0);  
-lv_obj_set_style_text_font(lblBitaxe, &lv_font_montserrat_20, 0);             
-lv_obj_align(lblBitaxe, LV_ALIGN_TOP_RIGHT, -25, 10);
-*/
+  // ============================================================
+  //   BITAXE WIDGET CLUSTER (190mm x 140mm → scaled panel)
+  //   8 empty cards laid out exactly like your blueprint
+  // ============================================================
 
+  // We scale the 190x140 mm layout into a 543x400 px area,
+  // then add a small padding inside the neon cyan frame.
+  const int FRAME_INNER_W = 543;   // scaled from 190mm
+  const int FRAME_INNER_H = 400;   // scaled from 140mm
+  const int FRAME_PAD     = 12;    // inner margin between border and widgets
 
+  const int FRAME_W = FRAME_INNER_W + FRAME_PAD * 2;
+  const int FRAME_H = FRAME_INNER_H + FRAME_PAD * 2;
 
-//New way using axestack_tokens
-// Place the right-most part first (so the whole pair anchors to the right)
-lv_obj_t* lblBitaxe = lv_label_create(scr);
-lv_label_set_text(lblBitaxe, " \\\\ Bitaxe Hub");   // shows as "\\ Bitaxe Hub"
-lv_obj_set_style_text_color(lblBitaxe, lv_color_hex(axe::color::text), 0);
-lv_obj_set_style_text_font(lblBitaxe, &lv_font_montserrat_20, 0);
-lv_obj_align(lblBitaxe, LV_ALIGN_TOP_RIGHT, -axe::spacing::xl, axe::spacing::sm + 2);
+  // Outer framed container with soft neon cyan glow
+  lv_obj_t* frame = lv_obj_create(scr);
+  lv_obj_remove_style_all(frame);
+  lv_obj_set_size(frame, FRAME_W, FRAME_H);
 
-// Now place the left part relative to lblBitaxe (no magic -140)
-lv_obj_t* lblAxeStack = lv_label_create(scr);
-lv_label_set_text(lblAxeStack, "AxeStack");
-lv_obj_set_style_text_color(lblAxeStack, lv_color_hex(axe::brand::orange), 0);
-lv_obj_set_style_text_font(lblAxeStack, &lv_font_montserrat_20, 0);
+  // Dark background for the panel
+  lv_obj_set_style_bg_color(frame, lv_color_hex(0x05070A), 0);
+  lv_obj_set_style_bg_opa(frame, LV_OPA_COVER, 0);
 
-// Position just to the LEFT of lblBitaxe with a small gap
-lv_obj_align_to(lblAxeStack, lblBitaxe, LV_ALIGN_OUT_LEFT_MID, -axe::spacing::xs - 2, 0);
+  // Neon cyan border + soft glow
+  lv_obj_set_style_border_width(frame, 2, 0);
+  lv_obj_set_style_border_color(frame, lv_color_hex(0x00F0FF), 0);
+  lv_obj_set_style_radius(frame, 12, 0);
 
+  lv_obj_set_style_shadow_color(frame, lv_color_hex(0x00F0FF), 0);
+  lv_obj_set_style_shadow_opa(frame, LV_OPA_30, 0);
+  lv_obj_set_style_shadow_width(frame, 18, 0);
+  lv_obj_set_style_shadow_spread(frame, 0, 0);
+  lv_obj_set_style_shadow_ofs_x(frame, 0, 0);
+  lv_obj_set_style_shadow_ofs_y(frame, 0, 0);
 
- // ── ROW 1: two cards under the titles
-lv_obj_t* row1 = lv_obj_create(scr);
-lv_obj_remove_style_all(row1);
-lv_obj_set_style_bg_opa(row1, LV_OPA_TRANSP, 0);
-lv_obj_set_size(row1, LV_PCT(100), LV_SIZE_CONTENT);
+  // Position the panel towards the bottom, leaving room for headers and footer
+  lv_obj_align(frame, LV_ALIGN_BOTTOM_MID, 0, -axe::spacing::lg);
 
-// place it under your title labels; adjust Y (44) to taste
-lv_obj_align(row1, LV_ALIGN_TOP_MID, 0, 44);
+  // Helper to create an empty widget card (no labels/icons)
+  auto make_empty_widget = [](lv_obj_t* parent) -> lv_obj_t* {
+    lv_obj_t* card = ui::make_card(parent);  // keeps global card style
+    // No labels or content – pure empty widget
+    return card;
+  };
 
-// make it a tidy horizontal row (no wrap), small gutters
-lv_obj_set_flex_flow(row1, LV_FLEX_FLOW_ROW);
-lv_obj_set_style_pad_left  (row1, axe::spacing::lg, 0);
-lv_obj_set_style_pad_right (row1, axe::spacing::lg, 0);
-lv_obj_set_style_pad_gap   (row1, 8, 0);
+  // NOTE: All positions below are scaled from your mm layout
+  // using a factor of 400px / 140mm. These ints are precomputed.
 
-// your standard card factory — consistent look with other screens
-lv_obj_t* cardTemp = ui::make_card(row1);
-lv_obj_set_size(cardTemp, LV_PCT(49), LV_SIZE_CONTENT);
+  // Widget 1: 40mm x 40mm at (0, 0)
+  lv_obj_t* w1 = make_empty_widget(frame);
+  lv_obj_set_size(w1, 114, 114);
+  lv_obj_set_pos (w1, FRAME_PAD + 0, FRAME_PAD + 0);
 
-lv_obj_t* cardFan  = ui::make_card(row1);
-lv_obj_set_size(cardFan,  LV_PCT(49), LV_SIZE_CONTENT);
+  // Widget 2: 85mm x 40mm at (45mm, 0)
+  lv_obj_t* w2 = make_empty_widget(frame);
+  lv_obj_set_size(w2, 243, 114);
+  lv_obj_set_pos (w2,
+                  FRAME_PAD + 129,  // x
+                  FRAME_PAD + 0);   // y
 
-// minimal titles only (we’ll style/border later)
-lv_obj_t* t1 = lv_label_create(cardTemp);
-lv_label_set_text(t1, "Temperature");
-lv_obj_set_style_text_color(t1, lv_color_hex(axe::brand::orange), 0);
-lv_obj_set_style_text_font (t1, &lv_font_montserrat_16, 0); 
+  // Widget 3: 55mm x 75mm at (135mm, 0)
+  lv_obj_t* w3 = make_empty_widget(frame);
+  lv_obj_set_size(w3, 157, 214);
+  lv_obj_set_pos (w3,
+                  FRAME_PAD + 386,
+                  FRAME_PAD + 0);
 
-lv_obj_t* t2 = lv_label_create(cardFan);
-lv_label_set_text(t2, "Fan");
-lv_obj_set_style_text_color(t2, lv_color_hex(axe::color::text), 0);
-lv_obj_set_style_text_font (t2, &lv_font_montserrat_16, 0); 
+  // Widget 4: 40mm x 40mm at (0, 45mm)
+  lv_obj_t* w4 = make_empty_widget(frame);
+  lv_obj_set_size(w4, 114, 114);
+  lv_obj_set_pos (w4,
+                  FRAME_PAD + 0,
+                  FRAME_PAD + 129);
 
+  // Widget 5: 40mm x 40mm at (45mm, 45mm)
+  lv_obj_t* w5 = make_empty_widget(frame);
+  lv_obj_set_size(w5, 114, 114);
+  lv_obj_set_pos (w5,
+                  FRAME_PAD + 129,
+                  FRAME_PAD + 129);
 
+  // Widget 6: 40mm x 95mm at (90mm, 45mm)
+  lv_obj_t* w6 = make_empty_widget(frame);
+  lv_obj_set_size(w6, 114, 271);
+  lv_obj_set_pos (w6,
+                  FRAME_PAD + 257,
+                  FRAME_PAD + 129);
 
+  // Widget 7: 85mm x 50mm at (0, 90mm)
+  lv_obj_t* w7 = make_empty_widget(frame);
+  lv_obj_set_size(w7, 243, 143);
+  lv_obj_set_pos (w7,
+                  FRAME_PAD + 0,
+                  FRAME_PAD + 257);
 
-// ── ROW 2: two cards below row1
-lv_obj_t* row2 = lv_obj_create(scr);                    // make a second row container
-lv_obj_remove_style_all(row2);                          // no default styles
-lv_obj_set_style_bg_opa(row2, LV_OPA_TRANSP, 0);        // fully transparent row bg
-lv_obj_set_size(row2, LV_PCT(100), LV_SIZE_CONTENT);    // full width; height fits its children
+  // Widget 8: 55mm x 60mm at (135mm, 80mm)
+  lv_obj_t* w8 = make_empty_widget(frame);
+  lv_obj_set_size(w8, 157, 171);
+  lv_obj_set_pos (w8,
+                  FRAME_PAD + 386,
+                  FRAME_PAD + 229);
 
-lv_obj_align_to(row2, row1, LV_ALIGN_OUT_BOTTOM_MID, 0, 8); // stick row2 right under row1 (8px gap)
+  // ============================================================
+  // Footer info (keeps your text, switches to tokens)
+  // ============================================================
+  lv_obj_t* inf = axe_make_label(scr, "SPARK v0.0.3", axe::type::body, axe::color::text);
+  lv_obj_set_style_text_font(inf, &lv_font_montserrat_16, 0);
+  lv_obj_align(inf, LV_ALIGN_BOTTOM_RIGHT, -(axe::spacing::lg + 36), -axe::spacing::xs);
 
-lv_obj_set_flex_flow(row2, LV_FLEX_FLOW_ROW);           // lay out children left→right
-lv_obj_set_style_pad_left  (row2, axe::spacing::lg, 0); // keep cards away from edges (left)
-lv_obj_set_style_pad_right (row2, axe::spacing::lg, 0); // ...and right
-lv_obj_set_style_pad_gap   (row2, 8, 0);                // small gap between the two cards
-
-// same standard card factory so it matches other screens
-lv_obj_t* cardShares = ui::make_card(row2);             // left card
-lv_obj_set_size(cardShares, LV_PCT(49), LV_SIZE_CONTENT);
-
-lv_obj_t* cardPower  = ui::make_card(row2);             // right card
-lv_obj_set_size(cardPower,  LV_PCT(49), LV_SIZE_CONTENT);
-
-// minimal titles (we’ll style/border later)
-lv_obj_t* t3 = lv_label_create(cardShares);
-lv_label_set_text(t3, "Shares");
-lv_obj_set_style_text_color(t3, lv_color_hex(axe::color::text), 0);
-lv_obj_set_style_text_font (t3, &lv_font_montserrat_16, 0); 
-
-
-lv_obj_t* t4 = lv_label_create(cardPower);
-lv_label_set_text(t4, "Power / Efficiency");
-lv_obj_set_style_text_color(t4, lv_color_hex(axe::brand::orange), 0);
-lv_obj_set_style_text_font (t4, &lv_font_montserrat_16, 0); 
-
-
-
-
-
-
-// ── ROW 3: one cards below row2
-lv_obj_t* row3 = lv_obj_create(scr);                    // make a third row container
-lv_obj_remove_style_all(row3);                          // no default styles
-lv_obj_set_style_bg_opa(row3, LV_OPA_TRANSP, 20);        // fully transparent row bg
-lv_obj_set_size(row3, LV_PCT(100), LV_SIZE_CONTENT);    // full width; height fits its children
-
-lv_obj_align_to(row3, row2, LV_ALIGN_OUT_BOTTOM_MID, 0, 8); // stick row2 right under row1 (8px gap)
-
-
-lv_obj_set_flex_flow(row3, LV_FLEX_FLOW_ROW);           // lay out children left→right
-lv_obj_set_style_pad_left  (row3, axe::spacing::lg, 0); // keep cards away from edges (left)
-lv_obj_set_style_pad_right (row3, axe::spacing::lg, 0); // ...and right
-
-
-lv_obj_t* cardModel = ui::make_card(row3);             // centre card
-lv_obj_set_size(cardModel, LV_PCT(100), LV_SIZE_CONTENT);
-
-lv_obj_t* t5 = lv_label_create(cardModel);
-lv_label_set_text(t5, "Model");
-lv_obj_set_style_text_color(t5, lv_color_hex(axe::color::text), 0);
-lv_obj_set_style_text_font (t5, &lv_font_montserrat_16, 0); 
-
-
-
-    // Footer info (keeps your text, switches to tokens)
-lv_obj_t* inf = axe_make_label(scr, "SPARK v0.0.3", axe::type::body, axe::color::text);
-lv_obj_set_style_text_font(inf, &lv_font_montserrat_16, 0);
-    //lv_obj_align(inf, LV_ALIGN_BOTTOM_RIGHT, -60, 0);
-lv_obj_align(inf, LV_ALIGN_BOTTOM_RIGHT, -(axe::spacing::lg + 36), -axe::spacing::xs);
-
- 
- 
-
-
-  //...BUTTONS...
+  // ============================================================
+  // Navigation BUTTONS
+  // ============================================================
 
   // Back Button
   backBtn = lv_obj_create(scr);
@@ -280,14 +228,12 @@ lv_obj_align(inf, LV_ALIGN_BOTTOM_RIGHT, -(axe::spacing::lg + 36), -axe::spacing
   lv_obj_add_style(backBtn, &orangeStyle, 0);
   lv_obj_add_event_cb(backBtn, onTouchEvent_bitaxe_screen, LV_EVENT_CLICKED, NULL);
 
-  
   // Right Button
   rightBtn = lv_obj_create(scr);
   lv_obj_set_size(rightBtn, 30, 30);
   lv_obj_align(rightBtn, LV_ALIGN_RIGHT_MID, -25, 20);
   lv_obj_add_style(rightBtn, &blueStyle, 0);
   lv_obj_add_event_cb(rightBtn, onTouchEvent_bitaxe_screen, LV_EVENT_CLICKED, NULL);
-  
 
   return scr;
 }
