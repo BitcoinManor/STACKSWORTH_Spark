@@ -628,18 +628,24 @@ lv_obj_t* portalUrlLabel = nullptr;
 
 
 
-lv_obj_t* create_portalScreen(const String& apName) {
-  lv_obj_t* scr = lv_obj_create(NULL);
-  ui::apply_root_bg(scr);                        // apply theme background (full screen black)
+//***Create Screen
 
-  // =====================================================================
-  // 🟧 STACKSWORTH Header 
-  // =====================================================================
-  lv_obj_t* blokdbitLabel = lv_label_create(scr);
-  lv_label_set_text(blokdbitLabel, "STACKSWORTH");
-  lv_obj_set_style_text_color(blokdbitLabel, lv_color_hex(0xFCA420), 0);
-  lv_obj_set_style_text_font(blokdbitLabel, &lv_font_montserrat_20, 0);
-  lv_obj_align(blokdbitLabel, LV_ALIGN_TOP_LEFT, 25, 10);
+lv_obj_t* create_portal_screen(const String& apName) {
+  lv_obj_t* scr = lv_obj_create(NULL);
+  lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0); //Black
+  
+  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, LV_PART_MAIN);
+
+
+
+
+  // Title labels
+
+  lv_obj_t* stacksworthLabel = lv_label_create(scr);
+  lv_label_set_text(stacksworthLabel, "STACKSWORTH");
+  lv_obj_set_style_text_color(stacksworthLabel, lv_color_hex(0xFCA420), 0);
+  lv_obj_set_style_text_font(stacksworthLabel, &lv_font_montserrat_20, 0);
+  lv_obj_align(stacksworthLabel, LV_ALIGN_TOP_LEFT, 25, 10);
 
   lv_obj_t* sparkLabel = lv_label_create(scr);
   lv_label_set_text(sparkLabel, "// SPARK");
@@ -648,131 +654,64 @@ lv_obj_t* create_portalScreen(const String& apName) {
   lv_obj_align(sparkLabel, LV_ALIGN_TOP_LEFT, 190, 10);
 
 
+  lv_obj_t* setupLabel = lv_label_create(scr);
+  lv_label_set_text(setupLabel, "SETUP");
+  lv_obj_set_style_text_color(setupLabel, lv_color_hex(0xFCA420), 0);
+  lv_obj_set_style_text_font(setupLabel, &lv_font_montserrat_20, 0);
+  lv_obj_align(setupLabel, LV_ALIGN_TOP_RIGHT, -25, 10);
+
   lv_obj_t* inf = lv_label_create(scr);
   lv_label_set_text(inf, "SPARK v1.1.1");
   lv_obj_set_style_text_color(inf, lv_color_hex(0xFFFFFF), 0);
   lv_obj_set_style_text_font(inf, &lv_font_montserrat_16, 0);
   lv_obj_align(inf, LV_ALIGN_BOTTOM_RIGHT, -60, 0);
 
-  // =====================================================================
-  // Main Content Container (centered layout)
-  // =====================================================================
-  lv_obj_t* mainCont = lv_obj_create(scr);
-  lv_obj_set_size(mainCont, 700, 350);  // Professional size
-  lv_obj_set_style_bg_color(mainCont, lv_color_black(), 0);
-  lv_obj_set_style_bg_opa(mainCont, LV_OPA_TRANSP, 0);  // Transparent background
-  lv_obj_set_style_border_width(mainCont, 0, 0);  // No border
-  lv_obj_set_style_pad_all(mainCont, 0, 0);
-  lv_obj_align(mainCont, LV_ALIGN_CENTER, 0, 0);
-  
-  // Use flexbox layout like main screens
-  lv_obj_set_flex_flow(mainCont, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_flex_align(mainCont, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_set_style_pad_gap(mainCont, 20, 0);
+   // Card
+  lv_obj_t* card = ui::make_card(scr);
+  lv_obj_set_size(card, 640, 360);
+  lv_obj_align(card, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_all(card, 20, 0);
+  lv_obj_set_style_pad_row(card, 14, 0);
 
-  // =====================================================================
-  // 🛡 Security Status Card
-  // =====================================================================
-  lv_obj_t* statusCard = lv_obj_create(mainCont);
-  lv_obj_set_size(statusCard, 400, LV_SIZE_CONTENT);
-  lv_obj_set_style_bg_color(statusCard, lv_color_hex(0x1A1A1A), 0);
-  lv_obj_set_style_bg_opa(statusCard, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_color(statusCard, lv_color_hex(0x00F5FF), 0);
-  lv_obj_set_style_border_width(statusCard, 2, 0);
-  lv_obj_set_style_radius(statusCard, 12, 0);
-  lv_obj_set_style_pad_all(statusCard, 20, 0);
+  // Title
+  lv_obj_t* title = lv_label_create(card);
+  lv_obj_add_style(title, &ui::st_title, 0);
+  lv_obj_set_style_text_font(title, &lv_font_montserrat_16, 0);
+  lv_obj_set_style_text_color(title, lv_color_hex(0x00F5FF), 0);
+  lv_label_set_text(title, "WIFI SETUP PORTAL");
 
-  // STACKSWORTHitle
-  lv_obj_t* securityTitle = lv_label_create(statusCard);
-  lv_label_set_text(securityTitle, "STACKSWORTH");
-  lv_obj_set_style_text_color(securityTitle, lv_color_hex(0x00F5FF), 0);
-  lv_obj_set_style_text_font(securityTitle, &lv_font_montserrat_48, 0);
-  lv_obj_set_style_text_align(securityTitle, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_align(securityTitle, LV_ALIGN_TOP_MID, 0, 0);
+  // Network name
+  lv_obj_t* networkLabel = lv_label_create(card);
+  lv_obj_set_style_text_font(networkLabel, &lv_font_montserrat_18, 0);
+  lv_obj_set_style_text_color(networkLabel, lv_color_white(), 0);
+  lv_label_set_text(networkLabel, "📡 Connect to Wi-Fi Network:");
 
-  lv_obj_t* statusDesc = lv_label_create(statusCard);
-  lv_label_set_text(statusDesc, "Where Data Comes To Life");
-  lv_obj_set_style_text_color(statusDesc, lv_color_white(), 0);
-  lv_obj_set_style_text_font(statusDesc, &lv_font_montserrat_16, 0);
-  lv_obj_set_style_text_align(statusDesc, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_align(statusDesc, LV_ALIGN_TOP_MID, 0, 35);
-
-  // =====================================================================
-  // 📡 Network Connection Card
-  // =====================================================================
-  lv_obj_t* networkCard = lv_obj_create(mainCont);
-  lv_obj_set_size(networkCard, 600, LV_SIZE_CONTENT);
-  lv_obj_set_style_bg_color(networkCard, lv_color_hex(0x2A2A2A), 0);
-  lv_obj_set_style_bg_opa(networkCard, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_color(networkCard, lv_color_hex(0xFCA420), 0);
-  lv_obj_set_style_border_width(networkCard, 2, 0);
-  lv_obj_set_style_radius(networkCard, 12, 0);
-  lv_obj_set_style_pad_all(networkCard, 20, 0);
-
-  lv_obj_t* networkTitle = lv_label_create(networkCard);
-  lv_label_set_text(networkTitle, "📡 Connect to Wi-Fi Network:");
-  lv_obj_set_style_text_color(networkTitle, lv_color_white(), 0);
-  lv_obj_set_style_text_font(networkTitle, &lv_font_montserrat_20, 0);
-  lv_obj_set_style_text_align(networkTitle, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_align(networkTitle, LV_ALIGN_TOP_MID, 0, 0);
-
-  // Network name (prominent)
-  lv_obj_t* apNameLabel = lv_label_create(networkCard);
-  lv_label_set_text_fmt(apNameLabel, "%s", apName.c_str());
+  lv_obj_t* apNameLabel = lv_label_create(card);
+  lv_obj_set_style_text_font(apNameLabel, &lv_font_montserrat_22, 0);
   lv_obj_set_style_text_color(apNameLabel, lv_color_hex(0xFCA420), 0);
-  lv_obj_set_style_text_font(apNameLabel, &lv_font_montserrat_26, 0);
-  lv_obj_set_style_text_align(apNameLabel, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_align(apNameLabel, LV_ALIGN_TOP_MID, 0, 35);
+  lv_label_set_text_fmt(apNameLabel, "%s", apName.c_str());
 
-  // =====================================================================
-  // 🌐 Portal Access Card
-  // =====================================================================
-  lv_obj_t* portalCard = lv_obj_create(mainCont);
-  lv_obj_set_size(portalCard, 600, LV_SIZE_CONTENT);
-  lv_obj_set_style_bg_color(portalCard, lv_color_hex(0x1A1A1A), 0);
-  lv_obj_set_style_bg_opa(portalCard, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_color(portalCard, lv_color_hex(0x555555), 0);
-  lv_obj_set_style_border_width(portalCard, 1, 0);
-  lv_obj_set_style_radius(portalCard, 12, 0);
-  lv_obj_set_style_pad_all(portalCard, 20, 0);
+  // Instructions
+  lv_obj_t* instructions = lv_label_create(card);
+  lv_obj_set_style_text_font(instructions, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_color(instructions, lv_color_white(), 0);
+  lv_label_set_text(instructions, "Setup portal should open automatically\nor manually visit: http://192.168.4.1");
 
-  lv_obj_t* portalInfo = lv_label_create(portalCard);
-  lv_label_set_text(portalInfo, 
-    "Setup portal will open automatically\n"
-    "Or manually visit: http://192.168.4.1");
-  lv_obj_set_style_text_color(portalInfo, lv_color_white(), 0);
-  lv_obj_set_style_text_font(portalInfo, &lv_font_montserrat_16, 0);
-  lv_obj_set_style_text_align(portalInfo, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_center(portalInfo);
-
-  // =====================================================================
-  // Bottom Status Indicator
-  // =====================================================================
-  lv_obj_t* statusCont = lv_obj_create(scr);
-  lv_obj_set_size(statusCont, 200, 50);
-  lv_obj_set_style_bg_color(statusCont, lv_color_black(), 0);
-  lv_obj_set_style_bg_opa(statusCont, LV_OPA_TRANSP, 0);
-  lv_obj_set_style_border_width(statusCont, 0, 0);
-  lv_obj_set_style_pad_all(statusCont, 0, 0);
-  lv_obj_align(statusCont, LV_ALIGN_BOTTOM_MID, 0, -20);
-  
-  // Activity indicator (spinner)
-  lv_obj_t* spinner = lv_spinner_create(statusCont, 1000, 90);
-  lv_obj_set_size(spinner, 30, 30);
-  lv_obj_set_style_arc_color(spinner, lv_color_hex(0x00F5FF), 0);
-  lv_obj_set_style_arc_width(spinner, 3, 0);
-  lv_obj_align(spinner, LV_ALIGN_LEFT_MID, 0, 0);
-
-  lv_obj_t* statusText = lv_label_create(statusCont);
-  lv_label_set_text(statusText, "Waiting for setup...");
+  // Status
+  lv_obj_t* statusText = lv_label_create(card);
+  lv_obj_set_style_text_font(statusText, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(statusText, lv_color_hex(0x00F5FF), 0);
-  lv_obj_set_style_text_font(statusText, &lv_font_montserrat_14, 0);
-  lv_obj_align(statusText, LV_ALIGN_LEFT_MID, 40, 0);
+  lv_label_set_text(statusText, "Waiting for setup…");
+
+
+ 
 
   return scr;
 }
 
-void showPortalScreen(const String& apName) {
+
+void showportal_screen(const String& apName) {
   if (!lv_ready) return;
 
   // If screen already created, just reload it
@@ -782,10 +721,9 @@ void showPortalScreen(const String& apName) {
   }
 
   // Create and load the portal screen
-  portalScreen = create_portalScreen(apName);
+  portalScreen = create_portal_screen(apName);
   lv_scr_load(portalScreen);
 }
-
 
 // ===== SatoNak API Functions =====
 
@@ -1590,20 +1528,15 @@ ui_weather_set_time(String());
 
 
   //  Initialize display + LVGL
+  // 1. Boot LVGL + LCD
   lcd_init();
   lv_ready = true;
 
-  //  UI based on mode: portal vs normal
-  if (portalModeActive) {
-    // Show the on-device instructions screen
-    showPortalScreen(g_apName);
-    // (Do NOT load metrics screen here; keep device in setup mode)
-  } else {
-    Serial.println("🌐 Wi-Fi connected via saved preferences.");
+  // 2. Initialize UI theme system
+  ui::init_ui_theme();
 
-    // Your existing UI init path
-    lvgl_port_lock(-1);
-    ui::init_ui_theme();         // ← initialize theme once
+  
+
 
     // *** STYLES ***
     lv_style_init(&orangeStyle);
@@ -1651,16 +1584,22 @@ ui_weather_set_time(String());
     lv_style_set_shadow_width(&glowStyle, 15);
     lv_style_set_shadow_opa(&glowStyle, LV_OPA_70);
 
-    // Load dashboard only when connected
-    lv_scr_load(create_metrics_screen());
-    lvgl_port_unlock();
+    //  UI based on mode: portal vs normal
+    if (portalModeActive) {
+      // Show the on-device instructions screen
+      showportal_screen(g_apName);
+    } else {
+      Serial.println("🌐 Wi-Fi connected via saved preferences.");
+      // Load dashboard only when connected
+      lv_scr_load(create_metrics_screen());
+      lvgl_port_unlock();
+    }
 
     Serial.println("✅ UI ready");
     delay(500);
     fetchBitcoinData();
     fetchBitcoinChartData(priceSeries, priceChart);
   }
-}
 
    
    
@@ -1721,7 +1660,7 @@ if (millis() - t2 > 1800000UL) {
   }
   t2 = millis();
 }
-} 
+}
  // --------------------------------------------------
  // 🚀 STACKSWORTH Spark – Engine Activated
  // Built with love, glow effects, and 🍊 coin self-sovereignty
