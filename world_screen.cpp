@@ -180,14 +180,9 @@ static void set_tz_from_portal_value(const String& label) {
 lv_obj_t* create_world_screen() {
   lv_obj_t* scr = lv_obj_create(NULL);
   lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0); //Black
-  //lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
   lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, LV_PART_MAIN);
 
-
-
-
   // Title labels
-
   lv_obj_t* stacksworthLabel = lv_label_create(scr);
   lv_label_set_text(stacksworthLabel, "STACKSWORTH");
   lv_obj_set_style_text_color(stacksworthLabel, lv_color_hex(0xFCA420), 0);
@@ -200,7 +195,6 @@ lv_obj_t* create_world_screen() {
   lv_obj_set_style_text_font(sparkLabel, &lv_font_montserrat_20, 0);
   lv_obj_align(sparkLabel, LV_ALIGN_TOP_LEFT, 190, 10);
 
-
   lv_obj_t* mainWeatherLabel = lv_label_create(scr);
   lv_label_set_text(mainWeatherLabel, "WEATHER");
   lv_obj_set_style_text_color(mainWeatherLabel, lv_color_hex(0xFCA420), 0);
@@ -208,91 +202,103 @@ lv_obj_t* create_world_screen() {
   lv_obj_align(mainWeatherLabel, LV_ALIGN_TOP_RIGHT, -25, 10);
 
   lv_obj_t* inf = lv_label_create(scr);
-  lv_label_set_text(inf, "SPARK v0.0.3");
+  lv_label_set_text(inf, "SPARK v1.1.1");
   lv_obj_set_style_text_color(inf, lv_color_hex(0xFFFFFF), 0);
   lv_obj_set_style_text_font(inf, &lv_font_montserrat_16, 0);
   lv_obj_align(inf, LV_ALIGN_BOTTOM_RIGHT, -60, 0);
 
+  // === TIME CARD (Top Center) ===
+  lv_obj_t* timeCard = ui::make_card(scr);
+  lv_obj_set_size(timeCard, 380, 140);
+  lv_obj_align(timeCard, LV_ALIGN_TOP_MID, 0, 60);
+  lv_obj_set_style_pad_all(timeCard, 20, 0);
 
-   // Card
-  lv_obj_t* card = ui::make_card(scr);
-  lv_obj_set_size(card, 660, 360);
-  lv_obj_align(card, LV_ALIGN_CENTER, 0, 0);
-  lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_style_pad_all(card, 20, 0);
-  lv_obj_set_style_pad_row(card, 14, 0);
+  lv_obj_t* timeTitle = lv_label_create(timeCard);
+  lv_obj_add_style(timeTitle, &ui::st_title, 0);
+  lv_label_set_text(timeTitle, "🕒 CURRENT TIME");
+  lv_obj_align(timeTitle, LV_ALIGN_TOP_MID, 0, 5);
 
-  // Title
-  lv_obj_t* title = lv_label_create(card);
-  lv_obj_add_style(title, &ui::st_title, 0);
-  lv_obj_set_style_text_font(title, &lv_font_montserrat_16, 0);
-  lv_label_set_text(title, "TIME •  DATE • LOCATION • WEATHER");
+  timeLabel = lv_label_create(timeCard);
+  lv_obj_add_style(timeLabel, &ui::st_value, 0);
+  lv_obj_set_style_text_font(timeLabel, &lv_font_montserrat_38, 0);
+  lv_obj_set_style_text_color(timeLabel, lv_color_hex(0x00F5FF), 0);
+  lv_obj_align(timeLabel, LV_ALIGN_CENTER, 0, 10);
 
-  // Big time
-timeLabel = lv_label_create(card);
-lv_obj_add_style(timeLabel, &ui::st_value, 0);
-lv_obj_set_width(timeLabel, LV_PCT(100));
-lv_obj_set_style_text_align(timeLabel, LV_TEXT_ALIGN_CENTER, 0);
-lv_obj_set_style_text_font(timeLabel, &lv_font_montserrat_48, 0);
+  dateLabel = lv_label_create(timeCard);
+  lv_obj_add_style(dateLabel, &ui::st_subtle, 0);
+  lv_obj_set_style_text_font(dateLabel, &lv_font_montserrat_16, 0);
+  lv_obj_align(dateLabel, LV_ALIGN_BOTTOM_MID, 0, -5);
 
+  // === LOCATION CARD (Bottom Left) ===
+  lv_obj_t* locationCard = ui::make_card(scr);
+  lv_obj_set_size(locationCard, 360, 180);
+  lv_obj_align(locationCard, LV_ALIGN_BOTTOM_LEFT, 50, -80);
+  lv_obj_set_style_pad_all(locationCard, 20, 0);
 
+  lv_obj_t* locationTitle = lv_label_create(locationCard);
+  lv_obj_add_style(locationTitle, &ui::st_title, 0);
+  lv_label_set_text(locationTitle, "📍 LOCATION");
+  lv_obj_align(locationTitle, LV_ALIGN_TOP_MID, 0, 5);
 
+  locationLabel = lv_label_create(locationCard);
+  lv_obj_add_style(locationLabel, &ui::st_value, 0);
+  lv_obj_set_style_text_font(locationLabel, &lv_font_montserrat_20, 0);
+  lv_obj_set_style_text_color(locationLabel, lv_color_hex(0xFCA420), 0);
+  lv_obj_set_style_text_align(locationLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_width(locationLabel, LV_PCT(90));
+  lv_obj_align(locationLabel, LV_ALIGN_CENTER, 0, 20);
 
-//Date
-dateLabel = lv_label_create(card);
-lv_obj_add_style(dateLabel, &ui::st_subtle, 0);
-lv_obj_set_width(dateLabel, LV_PCT(100));
-lv_obj_set_style_text_align(dateLabel, LV_TEXT_ALIGN_CENTER, 0);
-lv_obj_set_style_text_font(dateLabel, &lv_font_montserrat_38, 0);
+  // === WEATHER CARD (Bottom Right) ===
+  lv_obj_t* weatherCard = ui::make_card(scr);
+  lv_obj_set_size(weatherCard, 360, 180);
+  lv_obj_align(weatherCard, LV_ALIGN_BOTTOM_RIGHT, -50, -80);
+  lv_obj_set_style_pad_all(weatherCard, 20, 0);
 
-ensure_tz_initialized();
-render_time_from_rtc();
+  lv_obj_t* weatherTitle = lv_label_create(weatherCard);
+  lv_obj_add_style(weatherTitle, &ui::st_title, 0);
+  lv_label_set_text(weatherTitle, "🌤️ WEATHER");
+  lv_obj_align(weatherTitle, LV_ALIGN_TOP_MID, 0, 5);
 
-//minute timer
-if (!s_timeTimer) s_timeTimer = lv_timer_create(time_timer_cb, 60000, nullptr);
+  weatherLabel = lv_label_create(weatherCard);
+  lv_obj_add_style(weatherLabel, &ui::st_accent_secondary, 0);
+  lv_obj_set_style_text_font(weatherLabel, &lv_font_montserrat_26, 0);
+  lv_obj_set_style_text_color(weatherLabel, lv_color_hex(0x00FF88), 0);
+  lv_obj_set_style_text_align(weatherLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_width(weatherLabel, LV_PCT(90));
+  lv_obj_align(weatherLabel, LV_ALIGN_CENTER, 0, 20);
 
+  // Initialize content
+  ensure_tz_initialized();
+  render_time_from_rtc();
 
-// Location
-locationLabel = lv_label_create(card);
-lv_obj_add_style(locationLabel, &ui::st_value, 0);
-lv_obj_set_width(locationLabel, LV_PCT(100));
-lv_obj_set_style_text_align(locationLabel, LV_TEXT_ALIGN_CENTER, 0);
-lv_obj_set_style_text_font(locationLabel, &lv_font_montserrat_38, 0);
-{
-  String line = s_city;
-  if (s_region.length())  line += ", " + s_region;
-  if (s_country.length()) line += ", " + s_country;
-  if (!line.length())     line = "—";
-  lv_label_set_text(locationLabel, line.c_str()); // ← cached location
-}
+  // Set location content
+  {
+    String line = s_city;
+    if (s_region.length())  line += ", " + s_region;
+    if (s_country.length()) line += ", " + s_country;
+    if (!line.length())     line = "Location Unknown";
+    lv_label_set_text(locationLabel, line.c_str());
+  }
 
-// Weather
-weatherLabel = lv_label_create(card);
-lv_obj_add_style(weatherLabel, &ui::st_accent_secondary, 0);
-lv_obj_set_width(weatherLabel, LV_PCT(100));
-lv_obj_set_style_text_align(weatherLabel, LV_TEXT_ALIGN_CENTER, 0);
-lv_obj_set_style_text_font(weatherLabel, &lv_font_montserrat_30, 0);
-if (s_cond.length()) {
-  char buf[64];
-  snprintf(buf, sizeof(buf), "%d C  |  %s", s_tempC, s_cond.c_str());
+  // Set weather content
+  if (s_cond.length()) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%d°C\n%s", s_tempC, s_cond.c_str());
+    lv_label_set_text(weatherLabel, buf);
+  } else {
+    lv_label_set_text(weatherLabel, "Weather\nUnavailable");
+  }
 
-  lv_label_set_text(weatherLabel, buf);          // ← cached weather
-} else {
-  lv_label_set_text(weatherLabel, "—");
-}
+  // Start minute timer
+  if (!s_timeTimer) s_timeTimer = lv_timer_create(time_timer_cb, 60000, nullptr);
 
-
-  //...BUTTONS...
-
-  // Back Button
+  // Navigation buttons
   backBtn = lv_obj_create(scr);
   lv_obj_set_size(backBtn, 30, 30);
   lv_obj_align(backBtn, LV_ALIGN_LEFT_MID, 25, 20);
   lv_obj_add_style(backBtn, &orangeStyle, 0);
   lv_obj_add_event_cb(backBtn, onTouchEvent_world_screen, LV_EVENT_CLICKED, NULL);
 
-
-  // Right Button
   rightBtn = lv_obj_create(scr);
   lv_obj_set_size(rightBtn, 30, 30);
   lv_obj_align(rightBtn, LV_ALIGN_RIGHT_MID, -25, 20);
@@ -322,7 +328,8 @@ void ui_weather_set_current(int tempC, const String& condition) {
   s_tempC = tempC; s_cond = condition;
   if (!weatherLabel) return;
   char buf[64];
-  snprintf(buf, sizeof(buf), "%d°C — %s", s_tempC, s_cond.c_str());
+  snprintf(buf, sizeof(buf), "%d°C  |  %s", s_tempC, s_cond.c_str());
+
   lv_label_set_text(weatherLabel, buf);
 }
 
