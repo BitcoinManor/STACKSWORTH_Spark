@@ -236,6 +236,9 @@ server.on("/ping", HTTP_GET, [](AsyncWebServerRequest* r){ r->send(200, "text/pl
   // urlencoded form support (existing Matrix portal posts will hit this)
   server.on("/save", HTTP_POST, [](AsyncWebServerRequest *req){
     if (req->hasParam("ssid", true)) {
+      // Start portal animation
+      start_portal_save_animation();
+      
       prefs.begin("sw", false);
       prefs.putString("ssid", req->arg("ssid"));
       prefs.putString("pass", req->arg("password"));
@@ -275,6 +278,9 @@ server.onRequestBody([](AsyncWebServerRequest *req, uint8_t *data, size_t len, s
   String bottomtext = doc["bottomtext"] | "";     // 📝 Custom bottom message
 
   if (ssid.length()) {
+    // Start portal animation
+    start_portal_save_animation();
+    
     prefs.begin("sw", false);
     prefs.putString("ssid", ssid);
     prefs.putString("pass", pass);
@@ -544,6 +550,10 @@ static void paint_mid_if_ready() {
 lv_obj_t* portalScreen = nullptr;
 lv_obj_t* portalNetLabel = nullptr;
 lv_obj_t* portalUrlLabel = nullptr;
+lv_obj_t* portalCard = nullptr;
+lv_obj_t* portalStatusLabel = nullptr;
+lv_obj_t* portalProgressBar = nullptr;
+lv_timer_t* portalAnimTimer = nullptr;
 
 
 
@@ -630,17 +640,98 @@ lv_obj_t* portalUrlLabel = nullptr;
 
 //***Create Screen
 
-lv_obj_t* create_portal_screen(const String& apName) {
-  lv_obj_t* scr = lv_obj_create(NULL);
-  lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0); //Black
+// Portal save animation states
+enum PortalAnimState { IDLE, SAVING, SAVED, REBOOTING };
+static PortalAnimState animState = IDLE;
+static int animStep = 0;
+static unsigned long animStartTime = 0;
+
+// Portal animation timer callback
+static void portal_anim_timer_cb(lv_timer_t* timer) {
+  if (!portalCard || !portalStatusLabel || !portalProgressBar) return;
   
-  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, LV_PART_MAIN);
+  unsigned long elapsed = millis() - animStartTime;
+  
+  switch(animState) {
+    case SAVING:
+      // Pulse orange border (0-1000ms)
+      if (elapsed < 1000) {
+        float pulse = (sin(elapsed * 0.01) + 1.0f) * 0.5f; // 0.0 to 1.0
+        uint8_t orange_intensity = 100 + (155 * pulse); // Pulse between dim and bright orange
+        lv_obj_set_style_border_color(portalCard, lv_color_make(orange_intensity, orange_intensity/2, 0), 0);
+        lv_obj_set_style_border_width(portalCard, 3, 0);
+        lv_bar_set_value(portalProgressBar, (elapsed * 33) / 1000, LV_ANIM_OFF); // 0-33%
+      } else {
+        animState = SAVED;
+        animStartTime = millis();
+        lv_label_set_text(portalStatusLabel, "Saved!");
+      }
+      break;
+      
+    case SAVED:
+      // Hold green for 800ms
+      if (elapsed < 800) {
+        lv_obj_set_style_border_color(portalCard, lv_color_hex(0x00FF88), 0);
+        lv_bar_set_value(portalProgressBar, 33 + ((elapsed * 34) / 800), LV_ANIM_OFF); // 33-67%
+      } else {
+        animState = REBOOTING;
+        animStartTime = millis();
+        lv_label_set_text(portalStatusLabel, "Rebooting...");
+      }
+      break;
+      
+    case REBOOTING:
+      // Final phase - pulse red (1200ms)
+      if (elapsed < 1200) {
+        float pulse = (sin(elapsed * 0.015) + 1.0f) * 0.5f;
+        uint8_t red_intensity = 100 + (155 * pulse);
+        lv_obj_set_style_border_color(portalCard, lv_color_make(red_intensity, 0, 0), 0);
+        lv_bar_set_value(portalProgressBar, 67 + ((elapsed * 33) / 1200), LV_ANIM_OFF); // 67-100%
+      } else {
+        // Animation complete - stop timer
+        lv_timer_del(portalAnimTimer);
+        portalAnimTimer = nullptr;
+        // ESP will reboot shortly
+      }
+      break;
+      
+    default:
+      break;
+  }
+}
+
+// Start portal save animation
+void start_portal_save_animation() {
+  if (!portalCard || !portalStatusLabel || !portalProgressBar) return;
+  
+  animState = SAVING;
+  animStep = 0;
+  animStartTime = millis();
+  
+  // Update status text
+  lv_label_set_text(portalStatusLabel, "Saving...");
+  
+  // Show progress bar
+  lv_obj_clear_flag(portalProgressBar, LV_OBJ_FLAG_HIDDEN);
+  lv_bar_set_value(portalProgressBar, 0, LV_ANIM_OFF);
+  
+  // Start animation timer (50ms intervals for smooth animation)
+  if (!portalAnimTimer) {
+    portalAnimTimer = lv_timer_create(portal_anim_timer_cb, 50, nullptr);
+  }
+}
 
 
-
+lv_obj_t* create_portal_screen(const String& apName) {
+  // Root screen - FORCE BLACK EVERYTHING
+  lv_obj_t* scr = lv_obj_create(NULL);
+  lv_obj_set_size(scr, 800, 480);  // Force full screen size
+  lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0);
+  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+  lv_obj_set_style_pad_all(scr, 0, 0);  // No padding
+  lv_obj_set_style_border_width(scr, 0, 0);  // No border
 
   // Title labels
-
   lv_obj_t* stacksworthLabel = lv_label_create(scr);
   lv_label_set_text(stacksworthLabel, "STACKSWORTH");
   lv_obj_set_style_text_color(stacksworthLabel, lv_color_hex(0xFCA420), 0);
@@ -652,7 +743,6 @@ lv_obj_t* create_portal_screen(const String& apName) {
   lv_obj_set_style_text_color(sparkLabel, lv_color_hex(0xFFFFFF), 0);
   lv_obj_set_style_text_font(sparkLabel, &lv_font_montserrat_20, 0);
   lv_obj_align(sparkLabel, LV_ALIGN_TOP_LEFT, 190, 10);
-
 
   lv_obj_t* setupLabel = lv_label_create(scr);
   lv_label_set_text(setupLabel, "SETUP");
@@ -666,43 +756,65 @@ lv_obj_t* create_portal_screen(const String& apName) {
   lv_obj_set_style_text_font(inf, &lv_font_montserrat_16, 0);
   lv_obj_align(inf, LV_ALIGN_BOTTOM_RIGHT, -60, 0);
 
-   // Card
-  lv_obj_t* card = ui::make_card(scr);
-  lv_obj_set_size(card, 640, 360);
-  lv_obj_align(card, LV_ALIGN_CENTER, 0, 0);
-  lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_style_pad_all(card, 20, 0);
-  lv_obj_set_style_pad_row(card, 14, 0);
+  // Manual card - NO THEME SYSTEM
+  portalCard = lv_obj_create(scr);
+  lv_obj_set_size(portalCard, 600, 300);
+  lv_obj_align(portalCard, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_set_style_bg_color(portalCard, lv_color_hex(0x1A1A1A), 0);
+  lv_obj_set_style_bg_opa(portalCard, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_color(portalCard, lv_color_hex(0x00F5FF), 0);
+  lv_obj_set_style_border_width(portalCard, 2, 0);
+  lv_obj_set_style_radius(portalCard, 12, 0);
+  lv_obj_set_style_pad_all(portalCard, 20, 0);
 
   // Title
-  lv_obj_t* title = lv_label_create(card);
-  lv_obj_add_style(title, &ui::st_title, 0);
-  lv_obj_set_style_text_font(title, &lv_font_montserrat_16, 0);
+  lv_obj_t* title = lv_label_create(portalCard);
+  lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
   lv_obj_set_style_text_color(title, lv_color_hex(0x00F5FF), 0);
+  lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
   lv_label_set_text(title, "WIFI SETUP PORTAL");
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
 
   // Network name
-  lv_obj_t* networkLabel = lv_label_create(card);
-  lv_obj_set_style_text_font(networkLabel, &lv_font_montserrat_18, 0);
+  lv_obj_t* networkLabel = lv_label_create(portalCard);
+  lv_obj_set_style_text_font(networkLabel, &lv_font_montserrat_16, 0);
   lv_obj_set_style_text_color(networkLabel, lv_color_white(), 0);
-  lv_label_set_text(networkLabel, "📡 Connect to Wi-Fi Network:");
+  lv_obj_set_style_text_align(networkLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_label_set_text(networkLabel, "Connect to Wi-Fi Network:");
+  lv_obj_align(networkLabel, LV_ALIGN_CENTER, 0, -60);
 
-  lv_obj_t* apNameLabel = lv_label_create(card);
-  lv_obj_set_style_text_font(apNameLabel, &lv_font_montserrat_22, 0);
+  lv_obj_t* apNameLabel = lv_label_create(portalCard);
+  lv_obj_set_style_text_font(apNameLabel, &lv_font_montserrat_26, 0);
   lv_obj_set_style_text_color(apNameLabel, lv_color_hex(0xFCA420), 0);
+  lv_obj_set_style_text_align(apNameLabel, LV_TEXT_ALIGN_CENTER, 0);
   lv_label_set_text_fmt(apNameLabel, "%s", apName.c_str());
+  lv_obj_align(apNameLabel, LV_ALIGN_CENTER, 0, -20);
 
   // Instructions
-  lv_obj_t* instructions = lv_label_create(card);
+  lv_obj_t* instructions = lv_label_create(portalCard);
   lv_obj_set_style_text_font(instructions, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(instructions, lv_color_white(), 0);
+  lv_obj_set_style_text_align(instructions, LV_TEXT_ALIGN_CENTER, 0);
   lv_label_set_text(instructions, "Setup portal should open automatically\nor manually visit: http://192.168.4.1");
+  lv_obj_align(instructions, LV_ALIGN_CENTER, 0, 30);
+
+  // Progress bar (initially hidden)
+  portalProgressBar = lv_bar_create(portalCard);
+  lv_obj_set_size(portalProgressBar, 400, 8);
+  lv_obj_align(portalProgressBar, LV_ALIGN_CENTER, 0, 70);
+  lv_obj_set_style_bg_color(portalProgressBar, lv_color_hex(0x333333), 0);
+  lv_obj_set_style_bg_color(portalProgressBar, lv_color_hex(0x00F5FF), LV_PART_INDICATOR);
+  lv_obj_add_flag(portalProgressBar, LV_OBJ_FLAG_HIDDEN); // Start hidden
+  lv_bar_set_range(portalProgressBar, 0, 100);
+  lv_bar_set_value(portalProgressBar, 0, LV_ANIM_OFF);
 
   // Status
-  lv_obj_t* statusText = lv_label_create(card);
-  lv_obj_set_style_text_font(statusText, &lv_font_montserrat_12, 0);
-  lv_obj_set_style_text_color(statusText, lv_color_hex(0x00F5FF), 0);
-  lv_label_set_text(statusText, "Waiting for setup…");
+  portalStatusLabel = lv_label_create(portalCard);
+  lv_obj_set_style_text_font(portalStatusLabel, &lv_font_montserrat_12, 0);
+  lv_obj_set_style_text_color(portalStatusLabel, lv_color_hex(0x00F5FF), 0);
+  lv_obj_set_style_text_align(portalStatusLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_label_set_text(portalStatusLabel, "Waiting for setup...");
+  lv_obj_align(portalStatusLabel, LV_ALIGN_BOTTOM_MID, 0, -10);
 
 
  
@@ -1530,6 +1642,18 @@ ui_weather_set_time(String());
   //  Initialize display + LVGL
   // 1. Boot LVGL + LCD
   lcd_init();
+
+  // ---- FIRST FRAME BUG FIX FOR ST7262 ----
+  // Force full-screen black to wipe corrupt right-edge/bottom rows
+  lv_obj_t* wipe = lv_obj_create(NULL);
+  lv_obj_set_size(wipe, LV_PCT(100), LV_PCT(100));
+  lv_obj_set_style_bg_color(wipe, lv_color_black(), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(wipe, LV_OPA_COVER, LV_PART_MAIN);
+  lv_scr_load(wipe);
+  lv_timer_handler();  // force immediate draw
+  delay(60);           // allow panel to fully latch the frame
+  // ----------------------------------------
+
   lv_ready = true;
 
   // 2. Initialize UI theme system
