@@ -2,7 +2,7 @@
  *  STACKSWORTH Spark – "mainScreen" UI
  *  --------------------------------------------------
  *  Project     : STACKSWORTH Spark Firmware
- *  Version     : v0.0.4
+ *  Version     : v1.1.2
  *  Device      : ESP32-S3 Waveshare 7" Touchscreen (800x480)
  *  Description : Modular Bitcoin Dashboard UI using LVGL
  *  Designer    : Bitcoin Manor 🟧
@@ -20,6 +20,7 @@
 #include <ESPAsyncWebServer.h>
 #include <AsyncTCP.h>
 #include <DNSServer.h>
+#include <ESPmDNS.h>
 #include <FS.h>
 #include <SPIFFS.h>
 #include <Preferences.h>
@@ -125,6 +126,7 @@ void ui_update_block_labels(const uint32_t* heights, int count);
 
 // ==== Captive portal globals & helpers ====
 AsyncWebServer server(80);
+AsyncWebSocket ws("/ws/logs");  // WebSocket for live logs
 DNSServer dns;
 Preferences prefs;
 
@@ -133,6 +135,78 @@ bool portalModeActive = false;
 bool lv_ready = false;        // set true after lcd_init/LVGL init
 String g_apName;              // <-- needed by startPortal + LVGL pre-screen
 
+// mDNS and WiFi monitoring globals
+bool mdnsActive = false;
+unsigned long lastWiFiCheck = 0;
+const unsigned long WIFI_CHECK_INTERVAL = 30000;  // Check WiFi every 30 seconds
+
+// Live logging globals
+String logBuffer = "";
+const size_t LOG_BUFFER_SIZE = 2048;
+bool logClientsConnected = false;
+
+
+// Live logging globals
+String logBuffer = "";
+const size_t LOG_BUFFER_SIZE = 2048;
+bool logClientsConnected = false;
+
+// WebSocket event handler
+void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
+  switch(type) {
+    case WS_EVT_CONNECT:
+      Serial.printf("📡 WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
+      logClientsConnected = true;
+      // Send recent log buffer to new client
+      if (logBuffer.length() > 0) {
+        client->text(logBuffer);
+      }
+      break;
+      
+    case WS_EVT_DISCONNECT:
+      Serial.printf("📴 WebSocket client #%u disconnected\n", client->id());
+      if (ws.count() == 0) {
+        logClientsConnected = false;
+      }
+      break;
+      
+    case WS_EVT_ERROR:
+      Serial.printf("❌ WebSocket error from client #%u: %s\n", client->id(), (char*)data);
+      break;
+      
+    case WS_EVT_PONG:
+    case WS_EVT_DATA:
+      // Handle incoming data if needed
+      break;
+  }
+}
+
+// Enhanced Serial.print functions that also send to WebSocket
+void logPrint(String message) {
+  Serial.print(message);
+  
+  if (logClientsConnected && ws.count() > 0) {
+    // Add to buffer
+    logBuffer += message;
+    
+    // Trim buffer if too large
+    if (logBuffer.length() > LOG_BUFFER_SIZE) {
+      int cutPos = logBuffer.indexOf('\n', logBuffer.length() - LOG_BUFFER_SIZE + 200);
+      if (cutPos > 0) {
+        logBuffer = logBuffer.substring(cutPos + 1);
+      } else {
+        logBuffer = logBuffer.substring(logBuffer.length() - LOG_BUFFER_SIZE + 200);
+      }
+    }
+    
+    // Send to all connected clients
+    ws.textAll(message);
+  }
+}
+
+void logPrintln(String message) {
+  logPrint(message + "\n");
+}
 
 static const char* AP_PREFIX = "STACKSWORTH-SPARK";  // Spark build; Matrix uses ...-MATRIX
 
@@ -155,6 +229,294 @@ String makeAPName() {
 }
 
 
+// Initialize mDNS for spark.local access
+void setupMDNS() {
+  if (!mdnsActive && WiFi.status() == WL_CONNECTED) {
+    if (MDNS.begin("spark")) {
+      logPrintln("✅ mDNS started: http://spark.local");
+      
+      // Add service advertisements
+      MDNS.addService("http", "tcp", 80);
+      MDNS.addServiceTxt("http", "tcp", "device", "STACKSWORTH-Spark");
+      MDNS.addServiceTxt("http", "tcp", "version", "v1.1.1");
+      
+      mdnsActive = true;
+    } else {
+      logPrintln("❌ mDNS failed to start");
+    }
+  }
+}
+
+// Setup web server for dashboard mode (when connected to WiFi)
+void setupDashboardServer() {
+  if (!SPIFFS.begin(true)) {
+    Serial.println("⚠️ SPIFFS mount failed");
+    return;
+  }
+  
+  setupWebRoutes();  // Setup all routes
+  server.begin();
+  Serial.println("🌐 Dashboard server started");
+}
+
+// Generate fallback dashboard HTML if file missing
+String generateDashboardFallback() {
+  String html = R"html(<!DOCTYPE html>
+<html><head><title>STACKSWORTH Spark Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: Arial, sans-serif; background: linear-gradient(135deg, #000, #1a1a1a); color: #fff; padding: 20px; min-height: 100vh; }
+.container { max-width: 800px; margin: 0 auto; }
+.header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #fca420; padding-bottom: 20px; }
+.header h1 { color: #fca420; font-size: 2.5rem; margin-bottom: 10px; text-shadow: 0 0 10px rgba(252,164,32,0.5); }
+.card { background: rgba(26,26,26,0.8); border-radius: 15px; padding: 25px; margin: 20px 0; border: 2px solid #333; }
+.card:hover { border-color: #fca420; }
+.info-row { display: flex; justify-content: space-between; margin: 10px 0; }
+.btn { background: linear-gradient(135deg, #fca420, #ff8800); color: #000; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; margin: 5px; }
+.btn:hover { background: linear-gradient(135deg, #ff8800, #fca420); }
+.status-online { color: #00ff88; }
+</style>
+</head><body>
+<div class="container">
+<div class="header">
+<h1>STACKSWORTH SPARK</h1>
+<div style="color: #ccc;">Dashboard Fallback Mode • )html";
+
+  html += WiFi.localIP().toString();
+  html += R"html(</div>
+</div>
+<div class="card">
+<h3 style="color: #fca420; margin-bottom: 15px;">📄 Dashboard File Missing</h3>
+<p style="margin-bottom: 15px;">The main dashboard.html file was not found in SPIFFS.</p>
+<p style="margin-bottom: 15px;"><strong>To fix this:</strong></p>
+<ol style="margin-left: 20px; line-height: 1.6;">
+<li>Use Arduino IDE → Tools → ESP32 Sketch Data Upload</li>
+<li>Upload the /data folder contents to SPIFFS</li>
+<li>Refresh this page to see the full dashboard</li>
+</ol>
+</div>
+<div class="card">
+<h3 style="color: #fca420; margin-bottom: 15px;">🔧 Quick Actions</h3>
+<div class="info-row"><span>Device:</span><span>STACKSWORTH-SPARK</span></div>
+<div class="info-row"><span>IP Address:</span><span class="status-online">)html";
+
+  html += WiFi.localIP().toString();
+  html += R"html(</span></div>
+<div class="info-row"><span>mDNS:</span><span class="status-online">http://spark.local</span></div>
+<div class="info-row"><span>WiFi:</span><span class="status-online">)html";
+
+  html += WiFi.SSID();
+  html += R"html(</span></div>
+<div style="margin-top: 20px;">
+<button class="btn" onclick="fetch('/api/status').then(r=>r.json()).then(d=>alert(JSON.stringify(d,null,2)))">📊 Device Status</button>
+<button class="btn" onclick="if(confirm('Reboot device?')){fetch('/api/reboot',{method:'POST'}).then(()=>alert('Rebooting...'))}">🔄 Reboot</button>
+<button class="btn" onclick="window.location.reload()">🔄 Refresh</button>
+</div>
+</div>
+<div style="text-align: center; margin-top: 30px; color: #777;">
+<p>STACKSWORTH Spark v1.1.1 • <a href="http://spark.local" style="color: #fca420;">http://spark.local</a></p>
+</div>
+</div>
+</body></html>)html";
+
+  return html;
+}
+
+// API Handler: Device Status
+void handleAPIStatus(AsyncWebServerRequest* request) {
+  StaticJsonDocument<1024> doc;
+  
+  // Device info
+  doc["deviceName"] = makeAPName();
+  doc["wifiConnected"] = WiFi.status() == WL_CONNECTED;
+  doc["uptime"] = formatUptime(millis());
+  doc["freeMemory"] = ESP.getFreeHeap() / 1024;  // KB
+  
+  // Network info
+  doc["localIP"] = WiFi.localIP().toString();
+  doc["ssid"] = WiFi.SSID();
+  doc["rssi"] = WiFi.RSSI();
+  doc["macAddress"] = WiFi.macAddress();
+  
+  // Load current settings
+  prefs.begin("sw", true);
+  doc["city"] = prefs.getString("city", "");
+  doc["timezone"] = prefs.getString("tz", "11");
+  doc["currency"] = prefs.getString("currency", "USD");
+  doc["toptext"] = prefs.getString("toptext", "");
+  doc["bottomtext"] = prefs.getString("bottomtext", "");
+  prefs.end();
+  
+  String response;
+  serializeJson(doc, response);
+  request->send(200, "application/json", response);
+}
+
+// API Handler: Save Settings
+void handleAPISettings(AsyncWebServerRequest* request, uint8_t *data, size_t len) {
+  StaticJsonDocument<512> doc;
+  DeserializationError error = deserializeJson(doc, data, len);
+  
+  StaticJsonDocument<128> response;
+  
+  if (error) {
+    response["success"] = false;
+    response["error"] = "Invalid JSON";
+  } else {
+    prefs.begin("sw", false);
+    
+    if (doc.containsKey("city")) {
+      prefs.putString("city", doc["city"].as<String>());
+      g_savedCity = doc["city"].as<String>();
+    }
+    if (doc.containsKey("timezone")) {
+      prefs.putString("tz", doc["timezone"].as<String>());
+      g_savedTZ = doc["timezone"].as<String>();
+    }
+    if (doc.containsKey("currency")) {
+      prefs.putString("currency", doc["currency"].as<String>());
+      g_savedCurrency = doc["currency"].as<String>();
+    }
+    if (doc.containsKey("toptext")) {
+      prefs.putString("toptext", doc["toptext"].as<String>());
+      g_savedTopText = doc["toptext"].as<String>();
+    }
+    if (doc.containsKey("bottomtext")) {
+      prefs.putString("bottomtext", doc["bottomtext"].as<String>());
+      g_savedBottomText = doc["bottomtext"].as<String>();
+    }
+    
+    prefs.end();
+    
+    response["success"] = true;
+    Serial.println("💾 Settings saved via API");
+  }
+  
+  String responseStr;
+  serializeJson(response, responseStr);
+  request->send(200, "application/json", responseStr);
+}
+
+// API Handler: WiFi Settings
+void handleAPIWiFi(AsyncWebServerRequest* request, uint8_t *data, size_t len) {
+  StaticJsonDocument<256> doc;
+  DeserializationError error = deserializeJson(doc, data, len);
+  
+  StaticJsonDocument<128> response;
+  
+  if (error) {
+    response["success"] = false;
+    response["error"] = "Invalid JSON";
+  } else {
+    String ssid = doc["ssid"] | "";
+    String password = doc["password"] | "";
+    
+    if (ssid.length() > 0) {
+      prefs.begin("sw", false);
+      prefs.putString("ssid", ssid);
+      prefs.putString("pass", password);
+      prefs.end();
+      
+      response["success"] = true;
+      Serial.println("🌐 WiFi settings updated via API");
+      
+      // Send response first, then reboot
+      String responseStr;
+      serializeJson(response, responseStr);
+      request->send(200, "application/json", responseStr);
+      
+      delay(1000);
+      ESP.restart();
+      return;
+    } else {
+      response["success"] = false;
+      response["error"] = "SSID required";
+    }
+  }
+  
+  String responseStr;
+  serializeJson(response, responseStr);
+  request->send(200, "application/json", responseStr);
+}
+
+// API Handler: Reset WiFi
+void handleAPIResetWiFi(AsyncWebServerRequest* request) {
+  prefs.begin("sw", false);
+  prefs.remove("ssid");
+  prefs.remove("pass");
+  prefs.end();
+  
+  StaticJsonDocument<128> response;
+  response["success"] = true;
+  
+  String responseStr;
+  serializeJson(response, responseStr);
+  request->send(200, "application/json", responseStr);
+  
+  Serial.println("🔄 WiFi settings reset via API");
+  
+  delay(1000);
+  ESP.restart();
+}
+
+// API Handler: Reboot Device
+void handleAPIReboot(AsyncWebServerRequest* request) {
+  StaticJsonDocument<128> response;
+  response["success"] = true;
+  
+  String responseStr;
+  serializeJson(response, responseStr);
+  request->send(200, "application/json", responseStr);
+  
+  Serial.println("🔄 Reboot requested via API");
+  delay(1000);
+  ESP.restart();
+}
+
+// Format uptime in human-readable format
+String formatUptime(unsigned long milliseconds) {
+  unsigned long seconds = milliseconds / 1000;
+  unsigned long minutes = seconds / 60;
+  unsigned long hours = minutes / 60;
+  unsigned long days = hours / 24;
+  
+  String uptime = "";
+  if (days > 0) {
+    uptime += String(days) + "d ";
+  }
+  uptime += String(hours % 24) + "h ";
+  uptime += String(minutes % 60) + "m ";
+  uptime += String(seconds % 60) + "s";
+  
+  return uptime;
+}
+
+// Check WiFi connection and handle failures
+void checkWiFiConnection() {
+  if (millis() - lastWiFiCheck < WIFI_CHECK_INTERVAL) return;
+  lastWiFiCheck = millis();
+  
+  if (WiFi.status() != WL_CONNECTED && !portalModeActive) {
+    logPrintln("⚠️ WiFi connection lost - attempting to reconnect");
+    
+    // Try to reconnect first
+    if (connectWiFiFromPrefs(5000)) {
+      setupMDNS();  // Restart mDNS after reconnection
+      return;
+    }
+    
+    logPrintln("🚪 WiFi reconnection failed - starting portal mode");
+    mdnsActive = false;
+    startPortal();
+    
+    // Show portal screen if LVGL is ready
+    if (lv_ready) {
+      showportal_screen(g_apName);
+    }
+  }
+}
+
 // Try connecting from saved preferences
 bool connectWiFiFromPrefs(uint32_t timeoutMs=15000) {
   prefs.begin("sw", true);
@@ -174,6 +536,7 @@ bool connectWiFiFromPrefs(uint32_t timeoutMs=15000) {
   Serial.println();
   if (WiFi.status() == WL_CONNECTED) {
     Serial.printf("✅ WiFi OK: %s\n", WiFi.localIP().toString().c_str());
+    setupMDNS();  // Start mDNS immediately after successful connection
     return true;
   }
   Serial.println("❌ WiFi failed");
@@ -208,30 +571,99 @@ Serial.printf("SPIFFS exists /index.html.gz: %d  /index.html: %d\n",
 
   dns.start(53, "*", apIP);  // simple captive-portal DNS
 
-  // -------- Serve the portal file (handles .gz correctly) --------
-server.on("/", HTTP_GET, [](AsyncWebServerRequest* r){
-  String gz = String(PORTAL_FILE) + ".gz";  // "/STACKS_Wifi_Portal.html.gz"
-  if (SPIFFS.exists(gz)) {
-    AsyncWebServerResponse* resp = r->beginResponse(SPIFFS, gz, "text/html");
-    resp->addHeader("Content-Encoding", "gzip");
-    r->send(resp);
-  } else if (SPIFFS.exists(PORTAL_FILE)) {
-    r->send(SPIFFS, PORTAL_FILE, "text/html");
-  } else {
-    r->send(404, "text/plain", "Portal file missing");
-  }
-});
+  setupWebRoutes();  // Setup all web routes
+  server.begin();
+
+// 👉 Show on-screen instructions
+  //showPortalScreen(apName);
+g_apName = apName;  // remember until LVGL ready
+
+  Serial.printf("📶 AP: %s — connect and open http://192.168.4.1\n", apName.c_str());
+}
+
+// Setup all web server routes (both portal and dashboard)
+void setupWebRoutes() {
+  // Setup WebSocket for live logs
+  ws.onEvent(onWsEvent);
+  server.addHandler(&ws);
+  
+  // -------- Portal routes (for AP mode) --------
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest* r){
+    if (portalModeActive) {
+      // Serve portal in AP mode
+      String gz = String(PORTAL_FILE) + ".gz";  // "/STACKS_Wifi_Portal.html.gz"
+      if (SPIFFS.exists(gz)) {
+        AsyncWebServerResponse* resp = r->beginResponse(SPIFFS, gz, "text/html");
+        resp->addHeader("Content-Encoding", "gzip");
+        r->send(resp);
+      } else if (SPIFFS.exists(PORTAL_FILE)) {
+        r->send(SPIFFS, PORTAL_FILE, "text/html");
+      } else {
+        r->send(404, "text/plain", "Portal file missing");
+      }
+    } else {
+      // Serve dashboard when connected to WiFi
+      if (SPIFFS.exists("/dashboard.html")) {
+        r->send(SPIFFS, "/dashboard.html", "text/html");
+      } else {
+        r->send(200, "text/html", generateDashboardFallback());
+      }
+    }
+  });
 
 // Friendly aliases (optional)
 server.on("/index.html", HTTP_GET, [](AsyncWebServerRequest* r){ r->redirect("/"); });
 server.on("/portal",     HTTP_GET, [](AsyncWebServerRequest* r){ r->redirect("/"); });
+server.on("/dashboard",  HTTP_GET, [](AsyncWebServerRequest* r){
+  if (SPIFFS.exists("/dashboard.html")) {
+    r->send(SPIFFS, "/dashboard.html", "text/html");
+  } else {
+    r->send(200, "text/html", generateDashboardFallback());
+  }
+});
 
-// Captive convenience: redirect any stray path to root
-server.onNotFound([](AsyncWebServerRequest* r){ r->redirect("/"); });
+// Captive convenience: redirect any stray path to root (only in portal mode)
+server.onNotFound([](AsyncWebServerRequest* r){ 
+  if (portalModeActive) {
+    r->redirect("/"); 
+  } else {
+    r->send(404, "text/plain", "Not Found");
+  }
+});
 
 // Probe endpoint to verify the server is up
 server.on("/ping", HTTP_GET, [](AsyncWebServerRequest* r){ r->send(200, "text/plain", "pong"); });
 
+  // -------- API Endpoints --------
+  
+  // Device status API
+  server.on("/api/status", HTTP_GET, [](AsyncWebServerRequest* r){
+    handleAPIStatus(r);
+  });
+  
+  // Settings API
+  server.on("/api/settings", HTTP_POST, [](AsyncWebServerRequest* r){
+    // Will be handled by onRequestBody
+  }, nullptr, [](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t, size_t){
+    handleAPISettings(req, data, len);
+  });
+  
+  // WiFi API
+  server.on("/api/wifi", HTTP_POST, [](AsyncWebServerRequest* r){
+    // Will be handled by onRequestBody
+  }, nullptr, [](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t, size_t){
+    handleAPIWiFi(req, data, len);
+  });
+  
+  // Reset WiFi API
+  server.on("/api/reset-wifi", HTTP_POST, [](AsyncWebServerRequest* r){
+    handleAPIResetWiFi(r);
+  });
+  
+  // Reboot API
+  server.on("/api/reboot", HTTP_POST, [](AsyncWebServerRequest* r){
+    handleAPIReboot(r);
+  });
 
   // urlencoded form support (existing Matrix portal posts will hit this)
   server.on("/save", HTTP_POST, [](AsyncWebServerRequest *req){
@@ -257,42 +689,42 @@ server.on("/ping", HTTP_GET, [](AsyncWebServerRequest* r){ r->send(200, "text/pl
 
   // JSON body support
 server.onRequestBody([](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t, size_t){
-  if (req->url() != "/save") return;
+  if (req->url() == "/save") {
+    StaticJsonDocument<512> doc;
+    DeserializationError err = deserializeJson(doc, data, len);
+    if (err) {
+      Serial.printf("JSON parse error: %s\n", err.c_str());
+      return;
+    }
 
-  StaticJsonDocument<512> doc;
-  DeserializationError err = deserializeJson(doc, data, len);
-  if (err) {
-    Serial.printf("JSON parse error: %s\n", err.c_str());
-    return;
-  }
+    // ✅ No casts; let ArduinoJson apply defaults
+    String ssid   = doc["ssid"]     | "";
+    String pass   = doc["password"] | "";
+    String city   = doc["city"]     | "";
+    String tz     = doc["timezone"] | "";
+    String device = doc["device"]   | "";
+    String currency = doc["currency"] | "USD";      // 🌍 Currency support
+    String theme = doc["theme"] | "scroll";         // 🎨 Theme support
+    String toptext = doc["toptext"] | "";           // 📝 Custom top message
+    String bottomtext = doc["bottomtext"] | "";     // 📝 Custom bottom message
 
-  // ✅ No casts; let ArduinoJson apply defaults
-  String ssid   = doc["ssid"]     | "";
-  String pass   = doc["password"] | "";
-  String city   = doc["city"]     | "";
-  String tz     = doc["timezone"] | "";
-  String device = doc["device"]   | "";
-  String currency = doc["currency"] | "USD";      // 🌍 Currency support
-  String theme = doc["theme"] | "scroll";         // 🎨 Theme support
-  String toptext = doc["toptext"] | "";           // 📝 Custom top message
-  String bottomtext = doc["bottomtext"] | "";     // 📝 Custom bottom message
-
-  if (ssid.length()) {
-    // Start portal animation
-    start_portal_save_animation();
-    
-    prefs.begin("sw", false);
-    prefs.putString("ssid", ssid);
-    prefs.putString("pass", pass);
-    prefs.putString("city", city);
-    prefs.putString("tz",   tz);
-    prefs.putString("device", device);
-    prefs.putString("currency", currency);    // 🌍 Save currency
-    prefs.putString("theme", theme);          // 🎨 Save theme
-    prefs.putString("toptext", toptext);      // 📝 Save custom top
-    prefs.putString("bottomtext", bottomtext); // 📝 Save custom bottom
-    prefs.end();
-    Serial.println("💾 Saved portal fields (JSON).");
+    if (ssid.length()) {
+      // Start portal animation
+      start_portal_save_animation();
+      
+      prefs.begin("sw", false);
+      prefs.putString("ssid", ssid);
+      prefs.putString("pass", pass);
+      prefs.putString("city", city);
+      prefs.putString("tz",   tz);
+      prefs.putString("device", device);
+      prefs.putString("currency", currency);    // 🌍 Save currency
+      prefs.putString("theme", theme);          // 🎨 Save theme
+      prefs.putString("toptext", toptext);      // 📝 Save custom top
+      prefs.putString("bottomtext", bottomtext); // 📝 Save custom bottom
+      prefs.end();
+      Serial.println("💾 Saved portal fields (JSON).");
+    }
   }
 });
 
@@ -301,16 +733,6 @@ server.onRequestBody([](AsyncWebServerRequest *req, uint8_t *data, size_t len, s
     delay(250);
     ESP.restart();
   });
-
-  server.begin();
-
-// 👉 Show on-screen instructions
-  //showPortalScreen(apName);
-g_apName = apName;  // remember until LVGL ready
-
-
-
-  Serial.printf("📶 AP: %s — connect and open http://192.168.4.1\n", apName.c_str());
 }
 
 
@@ -552,7 +974,6 @@ lv_obj_t* portalNetLabel = nullptr;
 lv_obj_t* portalUrlLabel = nullptr;
 lv_obj_t* portalCard = nullptr;
 lv_obj_t* portalStatusLabel = nullptr;
-lv_obj_t* portalProgressBar = nullptr;
 lv_timer_t* portalAnimTimer = nullptr;
 
 
@@ -643,24 +1064,21 @@ lv_timer_t* portalAnimTimer = nullptr;
 // Portal save animation states
 enum PortalAnimState { IDLE, SAVING, SAVED, REBOOTING };
 static PortalAnimState animState = IDLE;
-static int animStep = 0;
 static unsigned long animStartTime = 0;
 
 // Portal animation timer callback
 static void portal_anim_timer_cb(lv_timer_t* timer) {
-  if (!portalCard || !portalStatusLabel || !portalProgressBar) return;
+  if (!portalCard || !portalStatusLabel) return;
   
   unsigned long elapsed = millis() - animStartTime;
   
   switch(animState) {
     case SAVING:
-      // Pulse orange border (0-1000ms)
-      if (elapsed < 1000) {
-        float pulse = (sin(elapsed * 0.01) + 1.0f) * 0.5f; // 0.0 to 1.0
-        uint8_t orange_intensity = 100 + (155 * pulse); // Pulse between dim and bright orange
-        lv_obj_set_style_border_color(portalCard, lv_color_make(orange_intensity, orange_intensity/2, 0), 0);
-        lv_obj_set_style_border_width(portalCard, 3, 0);
-        lv_bar_set_value(portalProgressBar, (elapsed * 33) / 1000, LV_ANIM_OFF); // 0-33%
+      // Pulse orange border (0-1500ms) - longer for smoother effect
+      if (elapsed < 1500) {
+        float pulse = (sin(elapsed * 0.004) + 1.0f) * 0.5f; // Slower sine wave
+        uint8_t orange_val = 150 + (105 * pulse); // 150-255 range for smooth orange
+        lv_obj_set_style_border_color(portalCard, lv_color_make(orange_val, orange_val/3, 0), 0);
       } else {
         animState = SAVED;
         animStartTime = millis();
@@ -669,10 +1087,9 @@ static void portal_anim_timer_cb(lv_timer_t* timer) {
       break;
       
     case SAVED:
-      // Hold green for 800ms
-      if (elapsed < 800) {
+      // Hold green for 1000ms
+      if (elapsed < 1000) {
         lv_obj_set_style_border_color(portalCard, lv_color_hex(0x00FF88), 0);
-        lv_bar_set_value(portalProgressBar, 33 + ((elapsed * 34) / 800), LV_ANIM_OFF); // 33-67%
       } else {
         animState = REBOOTING;
         animStartTime = millis();
@@ -681,12 +1098,11 @@ static void portal_anim_timer_cb(lv_timer_t* timer) {
       break;
       
     case REBOOTING:
-      // Final phase - pulse red (1200ms)
-      if (elapsed < 1200) {
-        float pulse = (sin(elapsed * 0.015) + 1.0f) * 0.5f;
-        uint8_t red_intensity = 100 + (155 * pulse);
-        lv_obj_set_style_border_color(portalCard, lv_color_make(red_intensity, 0, 0), 0);
-        lv_bar_set_value(portalProgressBar, 67 + ((elapsed * 33) / 1200), LV_ANIM_OFF); // 67-100%
+      // Pulse red (1500ms)
+      if (elapsed < 1500) {
+        float pulse = (sin(elapsed * 0.005) + 1.0f) * 0.5f; // Slower red pulse
+        uint8_t red_val = 120 + (135 * pulse); // 120-255 range
+        lv_obj_set_style_border_color(portalCard, lv_color_make(red_val, 0, 0), 0);
       } else {
         // Animation complete - stop timer
         lv_timer_del(portalAnimTimer);
@@ -702,22 +1118,17 @@ static void portal_anim_timer_cb(lv_timer_t* timer) {
 
 // Start portal save animation
 void start_portal_save_animation() {
-  if (!portalCard || !portalStatusLabel || !portalProgressBar) return;
+  if (!portalCard || !portalStatusLabel) return;
   
   animState = SAVING;
-  animStep = 0;
   animStartTime = millis();
   
   // Update status text
   lv_label_set_text(portalStatusLabel, "Saving...");
   
-  // Show progress bar
-  lv_obj_clear_flag(portalProgressBar, LV_OBJ_FLAG_HIDDEN);
-  lv_bar_set_value(portalProgressBar, 0, LV_ANIM_OFF);
-  
-  // Start animation timer (50ms intervals for smooth animation)
+  // Start animation timer (100ms intervals for smoother animation)
   if (!portalAnimTimer) {
-    portalAnimTimer = lv_timer_create(portal_anim_timer_cb, 50, nullptr);
+    portalAnimTimer = lv_timer_create(portal_anim_timer_cb, 100, nullptr);
   }
 }
 
@@ -797,16 +1208,6 @@ lv_obj_t* create_portal_screen(const String& apName) {
   lv_obj_set_style_text_align(instructions, LV_TEXT_ALIGN_CENTER, 0);
   lv_label_set_text(instructions, "Setup portal should open automatically\nor manually visit: http://192.168.4.1");
   lv_obj_align(instructions, LV_ALIGN_CENTER, 0, 30);
-
-  // Progress bar (initially hidden)
-  portalProgressBar = lv_bar_create(portalCard);
-  lv_obj_set_size(portalProgressBar, 400, 8);
-  lv_obj_align(portalProgressBar, LV_ALIGN_CENTER, 0, 70);
-  lv_obj_set_style_bg_color(portalProgressBar, lv_color_hex(0x333333), 0);
-  lv_obj_set_style_bg_color(portalProgressBar, lv_color_hex(0x00F5FF), LV_PART_INDICATOR);
-  lv_obj_add_flag(portalProgressBar, LV_OBJ_FLAG_HIDDEN); // Start hidden
-  lv_bar_set_range(portalProgressBar, 0, 100);
-  lv_bar_set_value(portalProgressBar, 0, LV_ANIM_OFF);
 
   // Status
   portalStatusLabel = lv_label_create(portalCard);
@@ -1708,18 +2109,18 @@ ui_weather_set_time(String());
     lv_style_set_shadow_width(&glowStyle, 15);
     lv_style_set_shadow_opa(&glowStyle, LV_OPA_70);
 
-    //  UI based on mode: portal vs normal
-    if (portalModeActive) {
-      // Show the on-device instructions screen
-      showportal_screen(g_apName);
-    } else {
-      Serial.println("🌐 Wi-Fi connected via saved preferences.");
-      // Load dashboard only when connected
-      lv_scr_load(create_metrics_screen());
-      lvgl_port_unlock();
-    }
-
-    Serial.println("✅ UI ready");
+  //  UI based on mode: portal vs normal
+  if (portalModeActive) {
+    // Show the on-device instructions screen
+    showportal_screen(g_apName);
+  } else {
+    Serial.println("🌐 Wi-Fi connected via saved preferences.");
+    // Setup dashboard web server for local access
+    setupDashboardServer();
+    // Load dashboard only when connected
+    lv_scr_load(create_metrics_screen());
+    lvgl_port_unlock();
+  }    Serial.println("✅ UI ready");
     delay(500);
     fetchBitcoinData();
     fetchBitcoinChartData(priceSeries, priceChart);
@@ -1727,9 +2128,12 @@ ui_weather_set_time(String());
 
    
    
-   void loop() {
-     if (portalModeActive) {
+void loop() {
+  if (portalModeActive) {
     dns.processNextRequest();   // keep the captive portal DNS responsive
+  } else {
+    // Monitor WiFi connection when not in portal mode
+    checkWiFiConnection();
   }
   
    static unsigned long lastUpdate = 0;
@@ -1737,9 +2141,7 @@ ui_weather_set_time(String());
      fetchBitcoinData();
      yield(); // Feed watchdog after data fetch
      lastUpdate = millis();
-   }
-
-static unsigned long t_hash = 0, t_blocks = 0, t_meta = 0;
+   }static unsigned long t_hash = 0, t_blocks = 0, t_meta = 0;
 unsigned long nowMs = millis();
 
 if (nowMs - t_hash   > 30000UL) { fetch_hashrate_and_diff();   t_hash = nowMs; yield(); }
