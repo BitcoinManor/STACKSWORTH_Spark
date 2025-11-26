@@ -1,5 +1,5 @@
 // SYACKSWORTH_Spark bitaxe_screen.cpp
-// SPARKv0.0.3
+// SPARKv1.0.0
 
 
 #include <Arduino.h>
@@ -113,10 +113,10 @@ lv_obj_t* create_bitaxe_screen() {
   //   8 empty cards laid out exactly like your blueprint
   // ============================================================
 
-  // We scale the 190x140 mm layout into a 543x400 px area,
-  // then add a small padding inside the neon cyan frame.
-  const int FRAME_INNER_W = 543;   // scaled from 190mm
-  const int FRAME_INNER_H = 400;   // scaled from 140mm
+  // Wider layout for better 7" screen utilization, keeping height manageable
+  // due to title/version space constraints at top and bottom.
+  const int FRAME_INNER_W = 700;   // wider for better screen usage  
+  const int FRAME_INNER_H = 400;   // keep original height (title/version limits)
   const int FRAME_PAD     = 12;    // inner margin between border and widgets
 
   const int FRAME_W = FRAME_INNER_W + FRAME_PAD * 2;
@@ -158,54 +158,54 @@ lv_obj_t* create_bitaxe_screen() {
 
   // Widget 1: 40mm x 40mm at (0, 0)
   lv_obj_t* w1 = make_empty_widget(frame);
-  lv_obj_set_size(w1, 114, 114);
+  lv_obj_set_size(w1, 147, 114);
   lv_obj_set_pos (w1, FRAME_PAD + 0, FRAME_PAD + 0);
 
   // Widget 2: 85mm x 40mm at (45mm, 0)
   lv_obj_t* w2 = make_empty_widget(frame);
-  lv_obj_set_size(w2, 243, 114);
+  lv_obj_set_size(w2, 313, 114);
   lv_obj_set_pos (w2,
                   FRAME_PAD + 129,  // x
                   FRAME_PAD + 0);   // y
 
   // Widget 3: 55mm x 75mm at (135mm, 0)
   lv_obj_t* w3 = make_empty_widget(frame);
-  lv_obj_set_size(w3, 157, 214);
+  lv_obj_set_size(w3, 202, 214);
   lv_obj_set_pos (w3,
                   FRAME_PAD + 386,
                   FRAME_PAD + 0);
 
   // Widget 4: 40mm x 40mm at (0, 45mm)
   lv_obj_t* w4 = make_empty_widget(frame);
-  lv_obj_set_size(w4, 114, 114);
+  lv_obj_set_size(w4, 147, 114);
   lv_obj_set_pos (w4,
                   FRAME_PAD + 0,
                   FRAME_PAD + 129);
 
   // Widget 5: 40mm x 40mm at (45mm, 45mm)
   lv_obj_t* w5 = make_empty_widget(frame);
-  lv_obj_set_size(w5, 114, 114);
+  lv_obj_set_size(w5, 147, 114);
   lv_obj_set_pos (w5,
                   FRAME_PAD + 129,
                   FRAME_PAD + 129);
 
   // Widget 6: 40mm x 95mm at (90mm, 45mm)
   lv_obj_t* w6 = make_empty_widget(frame);
-  lv_obj_set_size(w6, 114, 271);
+  lv_obj_set_size(w6, 147, 271);
   lv_obj_set_pos (w6,
                   FRAME_PAD + 257,
                   FRAME_PAD + 129);
 
   // Widget 7: 85mm x 50mm at (0, 90mm)
   lv_obj_t* w7 = make_empty_widget(frame);
-  lv_obj_set_size(w7, 243, 143);
+  lv_obj_set_size(w7, 313, 143);
   lv_obj_set_pos (w7,
                   FRAME_PAD + 0,
                   FRAME_PAD + 257);
 
   // Widget 8: 55mm x 60mm at (135mm, 80mm)
   lv_obj_t* w8 = make_empty_widget(frame);
-  lv_obj_set_size(w8, 157, 171);
+  lv_obj_set_size(w8, 202, 171);
   lv_obj_set_pos (w8,
                   FRAME_PAD + 386,
                   FRAME_PAD + 229);
@@ -224,14 +224,14 @@ lv_obj_t* create_bitaxe_screen() {
   // Back Button
   backBtn = lv_obj_create(scr);
   lv_obj_set_size(backBtn, 30, 30);
-  lv_obj_align(backBtn, LV_ALIGN_LEFT_MID, 25, 20);
+  lv_obj_align(backBtn, LV_ALIGN_BOTTOM_LEFT, 25, -60);
   lv_obj_add_style(backBtn, &orangeStyle, 0);
   lv_obj_add_event_cb(backBtn, onTouchEvent_bitaxe_screen, LV_EVENT_CLICKED, NULL);
 
   // Right Button
   rightBtn = lv_obj_create(scr);
   lv_obj_set_size(rightBtn, 30, 30);
-  lv_obj_align(rightBtn, LV_ALIGN_RIGHT_MID, -25, 20);
+  lv_obj_align(rightBtn, LV_ALIGN_BOTTOM_LEFT, 70, -60);
   lv_obj_add_style(rightBtn, &blueStyle, 0);
   lv_obj_add_event_cb(rightBtn, onTouchEvent_bitaxe_screen, LV_EVENT_CLICKED, NULL);
 
