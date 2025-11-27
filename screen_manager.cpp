@@ -19,9 +19,12 @@ bool isRightOn = false;
 // Current screen tracking for swipe navigation
 static int current_screen_index = 0;
 static const int TOTAL_SCREENS = 5;
+static bool screen_switching = false;  // Prevent recursive calls
 
 // Swipe gesture handler
 void swipe_event_handler(lv_event_t* e) {
+  if (screen_switching) return;  // Prevent recursive calls
+  
   lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
   
   if (dir == LV_DIR_LEFT) {
@@ -45,6 +48,9 @@ void screen_manager_init() {
 }
 
 void load_screen(int index) {
+  if (screen_switching) return;  // Prevent recursive calls
+  screen_switching = true;
+  
   // Update current screen tracking
   current_screen_index = index;
   
@@ -66,16 +72,18 @@ void load_screen(int index) {
   }
   
   if (new_scr) {
+    // Load new screen first
+    lv_scr_load(new_scr);
+    
     // Enable swipe gestures on the new screen
     lv_obj_add_event_cb(new_scr, swipe_event_handler, LV_EVENT_GESTURE, NULL);
     lv_obj_clear_flag(new_scr, LV_OBJ_FLAG_GESTURE_BUBBLE);
-    
-    // Load new screen first
-    lv_scr_load(new_scr);
     
     // Clean up old screen after successful load
     if (current_scr && current_scr != new_scr) {
       lv_obj_del_async(current_scr);
     }
   }
+  
+  screen_switching = false;  // Reset flag
 }
