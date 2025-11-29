@@ -758,7 +758,7 @@ float pabs = (pct >= 0) ? pct : -pct;
 
 char l2[260];
 snprintf(l2, sizeof(l2),
-  "Market Cap: #%s %s#  •  Circ. Supply: #%s %s / 21,000,000#  •  ATH: #%s %s# (#%s %dd ago, %c%.2f%%%#)",
+  "M. Cap: #%s %s#  •  Circ. Supply: #%s %s / 21,000,000#  •  ATH: #%s %s# #%s %dd ago, %c%.2f%%%#",
   hexL2, capBuf,
   hexL2, circNum,
   hexL2, athBuf,
@@ -820,20 +820,36 @@ static lv_obj_t* intervalChart  = nullptr;
 static lv_chart_series_t* intervalSeries = nullptr;
 static lv_obj_t*   intervalLabelRow = nullptr;
 static lv_obj_t*   blockNumLabels[12] = {nullptr};
+static lv_obj_t*   ivTargetLine = nullptr;
 
-// Update bars from an array of minutes (oldest→newest). Values clamped to 0..60.
+// Forward declaration
+static void iv_update_target_line();
+
+// Update bars from an array of minutes (oldest→newest). Use square root scaling like HTML.
 void ui_update_block_intervals(const uint8_t* minutes, int count) {
   if (!intervalChart || !intervalSeries || !minutes) return;
   const int n = lv_chart_get_point_count(intervalChart);
+  
   for (int i = 0; i < n; ++i) {
     // right-align latest values into the chart window
     const int src = count - n + i;
     int v = (src >= 0 && src < count) ? minutes[src] : 0;
-    const int MAXY = 25;  // clamp to 0..25 minutes
-    if (v < 0) v = 0; else if (v > MAXY) v = MAXY;
-    lv_chart_set_value_by_id(intervalChart, intervalSeries, i, (lv_coord_t)v);
+    
+    // Use square root scaling like HTML for better visibility of short intervals
+    const int MAX_MINUTES = 30;  // Match HTML maxM
+    if (v < 0) v = 0; 
+    else if (v > MAX_MINUTES) v = MAX_MINUTES;
+    
+    // Apply square root scaling: Math.sqrt(m / maxM) * range
+    float frac = sqrt((float)v / (float)MAX_MINUTES);  // Use sqrt instead of sqrtf for compatibility
+    int scaledValue = (int)(frac * MAX_MINUTES);
+    
+    lv_chart_set_value_by_id(intervalChart, intervalSeries, i, (lv_coord_t)scaledValue);
   }
   lv_chart_refresh(intervalChart);
+  
+  // Update target line position after chart data changes
+  iv_update_target_line();
 }
 
 // Public: update the 12 block-number labels under each bar (oldest→newest)
@@ -855,17 +871,34 @@ void ui_update_block_labels(const uint32_t* heights, int count) {
 
 
 
-static lv_obj_t* ivTargetLine = nullptr;
-
-
 static void iv_update_target_line() {
   if (!intervalChart || !ivTargetLine) return;
-  lv_area_t a; lv_obj_get_content_coords(intervalChart, &a);  // chart plot box
-  const float yMin = 0.f, yMax = 25.f;                        // keep in sync with set_range
-  float frac = (10.f - yMin) / (yMax - yMin);                 // 0..1 up from bottom
-  lv_coord_t y = a.y2 - (lv_coord_t)lroundf(frac * (a.y2 - a.y1));
-  lv_point_t pts[2] = { {a.x1, y}, {a.x2, y} };
+  
+  // Get chart's content coordinates (the actual plot area)
+  lv_area_t chart_area; 
+  lv_obj_get_content_coords(intervalChart, &chart_area);
+  
+  const float yMax = 30.f;  // Chart range [0-30]
+  
+  // Calculate Y position for 10-minute target using SAME square root scaling as bars
+  // This matches the scaling used in ui_update_block_intervals()
+  float target_minutes = 10.f;
+  float target_frac = sqrt(target_minutes / yMax);  // Square root scaling like bars
+  lv_coord_t chart_height = chart_area.y2 - chart_area.y1;
+  lv_coord_t target_y = chart_height - (lv_coord_t)(target_frac * chart_height);
+  
+  // Create horizontal line points in chart content coordinate space
+  lv_point_t pts[2] = { 
+    {0, target_y}, 
+    {chart_area.x2 - chart_area.x1, target_y} 
+  };
   lv_line_set_points(ivTargetLine, pts, 2);
+  
+  // Position the line within the chart content area
+  lv_obj_set_pos(ivTargetLine, 0, 0);
+  
+  // Force refresh
+  lv_obj_invalidate(ivTargetLine);
 }
 
 // Create the row of 12 labels beneath the chart; call once from create_metrics_screen()
@@ -876,14 +909,16 @@ static void ensure_block_label_row() {
   lv_obj_remove_style_all(intervalLabelRow);
   lv_obj_set_size(intervalLabelRow, LV_PCT(100), LV_SIZE_CONTENT);
   lv_obj_set_style_bg_opa(intervalLabelRow, LV_OPA_TRANSP, 0);
-  lv_obj_set_style_pad_top(intervalLabelRow, 4, 0);
-  lv_obj_set_style_pad_left(intervalLabelRow, 6, 0);
-  lv_obj_set_style_pad_right(intervalLabelRow, 6, 0);
+  lv_obj_set_style_pad_top(intervalLabelRow, 2, 0);  // Minimal spacing for tight alignment
+  
+  // Better alignment with chart bars - match chart's internal padding
+  lv_obj_set_style_pad_left(intervalLabelRow, 20, 0);   // Fine-tuned for bar alignment
+  lv_obj_set_style_pad_right(intervalLabelRow, 20, 0);  // Fine-tuned for bar alignment
 
-  // Even spacing under the 12 bars
+  // Even spacing under the 12 bars with improved distribution
   lv_obj_set_flex_flow(intervalLabelRow, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(intervalLabelRow,
-                        LV_FLEX_ALIGN_SPACE_BETWEEN,
+                        LV_FLEX_ALIGN_SPACE_EVENLY,  // Even distribution under bars
                         LV_FLEX_ALIGN_CENTER,
                         LV_FLEX_ALIGN_CENTER);
 
@@ -891,8 +926,12 @@ static void ensure_block_label_row() {
     blockNumLabels[i] = lv_label_create(intervalLabelRow);
     lv_obj_set_style_text_color(blockNumLabels[i], lv_color_hex(0x9AA0A6), 0);
     lv_obj_set_style_text_font(blockNumLabels[i], &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_align(blockNumLabels[i], LV_TEXT_ALIGN_CENTER, 0);  // Center align labels  
     lv_obj_set_style_text_align(blockNumLabels[i], LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_text(blockNumLabels[i], ""); // init empty
+    
+    // Set explicit width to ensure consistent spacing
+    lv_obj_set_width(blockNumLabels[i], 45);  // Slightly wider for better alignment
   }
 }
 
@@ -982,7 +1021,7 @@ refresh_accent_hex_from_theme();
 
 
   lv_obj_t* inf = lv_label_create(scr);
-  lv_label_set_text(inf, "SPARK v0.0.4");
+  lv_label_set_text(inf, "SPARK v1.1.1");
   lv_obj_set_style_text_color(inf, lv_color_hex(0xFFFFFF), 0);
   lv_obj_set_style_text_font(inf, &lv_font_montserrat_16, 0);
   lv_obj_align(inf, LV_ALIGN_BOTTOM_RIGHT, -60, 0);
@@ -1333,7 +1372,7 @@ lv_label_set_text(priceChartLabel, "24H Bitcoin Price");
 
 // Row 2: chart
 priceChart = lv_chart_create(footer);
-lv_obj_set_size(priceChart, 640, 90);
+lv_obj_set_size(priceChart, 640, 60);  // Reduced from 90 to 60 to prevent overlap
 lv_obj_set_style_bg_opa(priceChart, LV_OPA_TRANSP, 0);
 lv_obj_set_style_border_width(priceChart, 0, 0);
 lv_chart_set_type(priceChart, LV_CHART_TYPE_LINE);
@@ -1390,11 +1429,11 @@ lv_label_set_text(vol24Label, "Vol 24h: —");
 
 // ───────────────────────── Footer: Block Interval Visualizer ─────────────────────────
 intervalCard = ui::make_card(scr);
-lv_obj_set_size(intervalCard, 680, 160);
+lv_obj_set_size(intervalCard, 680, 160);  // Keep existing height
 lv_obj_align(intervalCard, LV_ALIGN_BOTTOM_MID, 0, -30);
 lv_obj_set_flex_flow(intervalCard, LV_FLEX_FLOW_COLUMN);
 lv_obj_set_style_pad_all(intervalCard, 12, 0);
-lv_obj_set_style_pad_row(intervalCard, 6, 0);
+lv_obj_set_style_pad_row(intervalCard, 4, 0);  // Tighter row spacing
 
 // Row 1: title + small pill
 lv_obj_t* ivTitle = lv_obj_create(intervalCard);
@@ -1420,39 +1459,59 @@ lv_obj_set_style_pad_ver(targetPill, 4, 0);
 lv_obj_set_style_text_font(targetPill, &lv_font_montserrat_12, 0);
 lv_label_set_text(targetPill, "target 10min");
 
-// Chart: BAR type, 12 columns, 0..60 minutes
+// Chart: BAR type, 12 columns, 0..30 minutes (to match HTML maxM=30)
 intervalChart = lv_chart_create(intervalCard);
-lv_obj_set_size(intervalChart, 640, 140);
+lv_obj_set_size(intervalChart, 640, 90);  // Reduced height to match HTML bars section
 lv_obj_set_style_bg_opa(intervalChart, LV_OPA_TRANSP, 0);
 lv_obj_set_style_border_width(intervalChart, 0, 0);
 lv_chart_set_type(intervalChart, LV_CHART_TYPE_BAR);
 lv_chart_set_point_count(intervalChart, 12);
 lv_chart_set_div_line_count(intervalChart, 0, 0);
 lv_chart_set_update_mode(intervalChart, LV_CHART_UPDATE_MODE_SHIFT);
-lv_chart_set_range(intervalChart, LV_CHART_AXIS_PRIMARY_Y, 0, 25);
+lv_chart_set_range(intervalChart, LV_CHART_AXIS_PRIMARY_Y, 0, 30);  // Match HTML maxM range
 
 // Outer padding so bars don't touch the card edges
 lv_obj_set_style_pad_left(intervalChart, 6, 0);
 lv_obj_set_style_pad_right(intervalChart, 6, 0);
+lv_obj_set_style_pad_bottom(intervalChart, 6, 0);
+lv_obj_set_style_pad_top(intervalChart, 6, 0);
 
-// Bar thickness (controls perceived gap between bars)
-lv_obj_set_style_size(intervalChart, 10, LV_PART_ITEMS);
+// Bar thickness - wider bars with smaller gaps like HTML
+lv_obj_set_style_size(intervalChart, 18, LV_PART_ITEMS);
 
-
-// bars use the SECONDARY accent (glowy cyan in your theme)
+// bars use the SECONDARY accent (glowy cyan in your theme) with gradient effect
 intervalSeries = lv_chart_add_series(intervalChart, ACC_SECONDARY(), LV_CHART_AXIS_PRIMARY_Y);
+
+// Apply gradient styling to match HTML bars
+static lv_style_t st_interval_bars;
+static bool interval_bars_styled = false;
+if (!interval_bars_styled) {
+  interval_bars_styled = true;
+  lv_style_init(&st_interval_bars);
+  lv_style_set_bg_grad_dir(&st_interval_bars, LV_GRAD_DIR_VER);
+  // Use a manually lightened version instead of lv_color_lighten which might not exist
+  lv_color_t lightened = lv_color_mix(lv_color_white(), ACC_SECONDARY(), 100);  // 40% lighter
+  lv_style_set_bg_grad_color(&st_interval_bars, lightened);
+  lv_style_set_bg_color(&st_interval_bars, ACC_SECONDARY());
+  lv_style_set_radius(&st_interval_bars, 6);
+  lv_style_set_border_color(&st_interval_bars, lv_color_hex(0x1f2a37));
+  lv_style_set_border_width(&st_interval_bars, 1);
+}
+lv_obj_add_style(intervalChart, &st_interval_bars, LV_PART_ITEMS);
 
 
 
 
 // create dashed 10-minute target line over the chart
-if (!ivTargetLine) ivTargetLine = lv_line_create(intervalCard);
-lv_obj_add_flag(ivTargetLine, LV_OBJ_FLAG_IGNORE_LAYOUT);
-lv_obj_set_style_line_width(ivTargetLine, 2, 0);
-lv_obj_set_style_line_dash_width(ivTargetLine, 6, 0);
-lv_obj_set_style_line_dash_gap(ivTargetLine, 6, 0);
-// color complements bars; apply_accent_to_interval() will keep it in sync
-lv_obj_set_style_line_color(ivTargetLine, ACC_PRIMARY(), 0);
+if (!ivTargetLine) {
+  ivTargetLine = lv_line_create(intervalChart);  // Create as child of chart, not card
+  lv_obj_add_flag(ivTargetLine, LV_OBJ_FLAG_IGNORE_LAYOUT);
+  lv_obj_set_style_line_width(ivTargetLine, 2, 0);
+  lv_obj_set_style_line_dash_width(ivTargetLine, 6, 0);
+  lv_obj_set_style_line_dash_gap(ivTargetLine, 6, 0);
+  // color complements bars; apply_accent_to_interval() will keep it in sync
+  lv_obj_set_style_line_color(ivTargetLine, ACC_PRIMARY(), 0);
+}
 
 // position it ~40–50% up, synced to chart range [0..25]
 iv_update_target_line();   // call after lv_chart_set_range(...)
@@ -1472,7 +1531,8 @@ ui_update_block_intervals(kDemoIntervals, 12);
 lv_obj_t* ivSub = lv_label_create(intervalCard);
 lv_obj_set_style_text_color(ivSub, lv_color_hex(0x9AA0A6), 0);
 lv_obj_set_style_text_font(ivSub, &lv_font_montserrat_12, 0);
-lv_label_set_text(ivSub, "Each column = minutes between blocks; target = 10m.");
+lv_obj_set_style_text_align(ivSub, LV_TEXT_ALIGN_CENTER, 0);
+lv_label_set_text(ivSub, "Each column = minutes between blocks; dashed line = 10m target.");  // Match HTML description
 
 
 
@@ -1534,7 +1594,7 @@ lv_label_set_recolor(midLine2Label, true);
 {
   char init2[220];
   snprintf(init2, sizeof(init2),
-           "Market Cap: #%s —#  •  Circulating Supply: #%s — / 21,000,000#  •  All Time High: #%s —# (#%s —d ago#)",
+           "M. Cap: #%s —#  •  Circ. Supply: #%s — / 21,000,000#  •  All Time High: #%s —# #%s —d ago#",
            g_hex_secondary, g_hex_secondary, g_hex_secondary, g_hex_secondary);
   lv_label_set_text(midLine2Label, init2);
 }
