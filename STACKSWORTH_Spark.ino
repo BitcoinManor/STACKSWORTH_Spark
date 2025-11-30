@@ -538,6 +538,8 @@ bool connectWiFiFromPrefs(uint32_t timeoutMs) {
   if (ssid.isEmpty()) return false;
 
   WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);  // Enable automatic reconnection
+  WiFi.setSleep(false);         // Disable WiFi sleep mode for stability
   WiFi.begin(ssid.c_str(), pass.c_str());
   Serial.printf("🌐 Connecting to %s", ssid.c_str());
   uint32_t start = millis();
