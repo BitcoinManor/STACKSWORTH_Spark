@@ -1,6 +1,6 @@
 
 // STACKSWORTH_Spark metrics_screen.cpp
-// SPARKv0.0.4
+// SPARKv1.0.0
 
 #include <Arduino.h>
 #include "metrics_screen.h"
@@ -874,6 +874,9 @@ void ui_update_block_labels(const uint32_t* heights, int count) {
   
   // Ensure labels are positioned correctly after text updates
   update_block_label_positions();
+  
+  // Update target line now that we have real chart data
+  iv_update_target_line(true);  // Force update with real data
 }
 
 
@@ -881,9 +884,9 @@ void ui_update_block_labels(const uint32_t* heights, int count) {
 static void iv_update_target_line(bool force) {
   if (!intervalChart || !ivTargetLine || !intervalCard) return;
   
-  // Throttle updates to prevent watchdog timeout (max once per 2 seconds)
+  // Throttle updates to prevent watchdog timeout (max once per 5 seconds)
   unsigned long now = millis();
-  if (!force && now - lastTargetLineUpdate < 2000) {
+  if (!force && now - lastTargetLineUpdate < 5000) {
     return;
   }
   lastTargetLineUpdate = now;
@@ -900,8 +903,8 @@ static void iv_update_target_line(bool force) {
   lv_coord_t chart_width = chart_content.x2 - chart_content.x1;
   lv_coord_t chart_height = chart_content.y2 - chart_content.y1;
   
-  if (chart_width <= 0 || chart_height <= 0) {
-    Serial.println("Target line: Invalid chart dimensions, skipping update");
+  if (chart_width <= 10 || chart_height <= 10) {
+    Serial.printf("Target line: Invalid chart dimensions w=%d h=%d, skipping update\n", chart_width, chart_height);
     return;
   }
   
@@ -937,6 +940,9 @@ static void iv_update_target_line(bool force) {
   Serial.printf("Target line: x1=%d, x2=%d, y=%d (w=%d, h=%d)\n", 
                 line_x1_card_relative, line_x2_card_relative, target_y_card_relative,
                 chart_width, chart_height);
+  
+  // Yield to prevent watchdog timeout during LVGL operations
+  yield();
   
   // Force refresh and move to front
   lv_obj_move_foreground(ivTargetLine);
@@ -1592,14 +1598,14 @@ if (!ivTargetLine) {
   lv_obj_set_style_line_opa(ivTargetLine, LV_OPA_80, 0);  // Slight transparency
 }
 
-// Note: Target line positioning will be done after chart data is loaded via iv_update_target_line()
+// Note: Target line will be positioned after real chart data is loaded
 // Create the block-number row under the chart
 ensure_block_label_row();
 
 
 
-// seed demo values for testing
-#if 1
+// seed demo values - disabled to prevent premature target line calls
+#if 0
 static const uint8_t kDemoIntervals[10] = { 9, 12, 7, 8, 11, 4, 16, 10, 6, 14 };
 ui_update_block_intervals(kDemoIntervals, 10);
 #endif
