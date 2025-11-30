@@ -43,6 +43,14 @@
 #include <math.h>
 #include "axestack_theme.h"
 
+// ===== Forward Function Declarations =====
+String formatUptime(unsigned long milliseconds);
+bool connectWiFiFromPrefs(uint32_t timeoutMs = 15000);
+void startPortal();
+void setupWebRoutes();
+void showportal_screen(const String& apName);
+void start_portal_save_animation();
+
 // ===== SatoNak API Configuration =====
 #define USE_SATONAK_API 1    // 1 = use SatoNak endpoints, 0 = fallback to original sources
 
@@ -139,12 +147,6 @@ String g_apName;              // <-- needed by startPortal + LVGL pre-screen
 bool mdnsActive = false;
 unsigned long lastWiFiCheck = 0;
 const unsigned long WIFI_CHECK_INTERVAL = 30000;  // Check WiFi every 30 seconds
-
-// Live logging globals
-String logBuffer = "";
-const size_t LOG_BUFFER_SIZE = 2048;
-bool logClientsConnected = false;
-
 
 // Live logging globals
 String logBuffer = "";
@@ -254,9 +256,18 @@ void setupDashboardServer() {
     return;
   }
   
+  // Debug: List all files in SPIFFS
+  logPrintln("📂 SPIFFS Files:");
+  File root = SPIFFS.open("/");
+  File file = root.openNextFile();
+  while(file) {
+    logPrintln("  📄 " + String(file.name()) + " (" + String(file.size()) + " bytes)");
+    file = root.openNextFile();
+  }
+  
   setupWebRoutes();  // Setup all routes
   server.begin();
-  Serial.println("🌐 Dashboard server started");
+  logPrintln("🌐 Dashboard server started");
 }
 
 // Generate fallback dashboard HTML if file missing
@@ -518,7 +529,7 @@ void checkWiFiConnection() {
 }
 
 // Try connecting from saved preferences
-bool connectWiFiFromPrefs(uint32_t timeoutMs=15000) {
+bool connectWiFiFromPrefs(uint32_t timeoutMs) {
   prefs.begin("sw", true);
   String ssid = prefs.getString("ssid", "");
   String pass = prefs.getString("pass", "");
@@ -1262,18 +1273,27 @@ bool fetchPriceFromSatoNak() {
   String payload = http.getString();
   http.end();
 
-  // Parse response
-  DynamicJsonDocument doc(1536);
-  DeserializationError e = deserializeJson(doc, payload);
-  if (e) return false;
-
-  // Get price for current fiat
-  String key = currentFiat; key.toLowerCase();
-  double price = 0.0;
+  // Try plain text format first (e.g., "90768.00")
+  payload.trim();  // Remove any whitespace
+  double price = payload.toDouble();
   
-  if (doc.containsKey("value")) {
-    price = doc["value"] | 0.0;
+  // If plain text parsing fails, try JSON format
+  if (price <= 0.0) {
+    DynamicJsonDocument doc(1536);
+    DeserializationError e = deserializeJson(doc, payload);
+    if (e) return false;
+
+    // Get price for current fiat
+    String key = currentFiat; key.toLowerCase();
+    
+    if (doc.containsKey("value")) {
+      price = doc["value"] | 0.0;
+    }
   }
+  
+  Serial.printf("🔍 SatoNak payload: '%s' -> price: %.2f\n", payload.c_str(), price);
+  
+  Serial.printf("🔍 SatoNak payload: '%s' -> price: %.2f\n", payload.c_str(), price);
   
   if (price <= 0.0) return false;
 
