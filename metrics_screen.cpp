@@ -819,11 +819,13 @@ static lv_obj_t* intervalCard   = nullptr;
 static lv_obj_t* intervalChart  = nullptr;
 static lv_chart_series_t* intervalSeries = nullptr;
 static lv_obj_t*   intervalLabelRow = nullptr;
-static lv_obj_t*   blockNumLabels[12] = {nullptr};
+static lv_obj_t*   blockNumLabels[10] = {nullptr};
 static lv_obj_t*   ivTargetLine = nullptr;
+static unsigned long lastTargetLineUpdate = 0;  // Throttle target line updates
 
 // Forward declaration
-static void iv_update_target_line();
+static void iv_update_target_line(bool force = false);
+static void update_block_label_positions();
 
 // Update bars from an array of minutes (oldest→newest). Use square root scaling like HTML.
 void ui_update_block_intervals(const uint8_t* minutes, int count) {
@@ -848,17 +850,19 @@ void ui_update_block_intervals(const uint8_t* minutes, int count) {
   }
   lv_chart_refresh(intervalChart);
   
-  // Update target line position after chart data changes
-  iv_update_target_line();
+  // Update target line position after chart data changes (force update)
+  iv_update_target_line(true);
+  // Update block label positions to match bars
+  update_block_label_positions();
 }
 
-// Public: update the 12 block-number labels under each bar (oldest→newest)
+// Public: update the 10 block-number labels under each bar (oldest→newest)
 void ui_update_block_labels(const uint32_t* heights, int count) {
   if (!intervalLabelRow || !heights) return;
 
-  // Right-align into 12 slots (like the bars)
-  for (int i = 0; i < 12; ++i) {
-    int src = count - 12 + i;
+  // Right-align into 10 slots (like the bars)
+  for (int i = 0; i < 10; ++i) {
+    int src = count - 10 + i;
     if (src >= 0 && src < count) {
       char buf[16];
       snprintf(buf, sizeof(buf), "%u", (unsigned)heights[src]);
@@ -867,71 +871,145 @@ void ui_update_block_labels(const uint32_t* heights, int count) {
       lv_label_set_text(blockNumLabels[i], "");
     }
   }
+  
+  // Ensure labels are positioned correctly after text updates
+  update_block_label_positions();
 }
 
 
 
-static void iv_update_target_line() {
-  if (!intervalChart || !ivTargetLine) return;
+static void iv_update_target_line(bool force) {
+  if (!intervalChart || !ivTargetLine || !intervalCard) return;
   
-  // Get chart's content coordinates (the actual plot area)
-  lv_area_t chart_area; 
-  lv_obj_get_content_coords(intervalChart, &chart_area);
+  // Throttle updates to prevent watchdog timeout (max once per 2 seconds)
+  unsigned long now = millis();
+  if (!force && now - lastTargetLineUpdate < 2000) {
+    return;
+  }
+  lastTargetLineUpdate = now;
+  
+  // Get chart content area (where bars are drawn)
+  lv_area_t chart_content;
+  lv_obj_get_content_coords(intervalChart, &chart_content);
+  
+  // Get card area for coordinate conversion
+  lv_area_t card_area;
+  lv_obj_get_coords(intervalCard, &card_area);
+  
+  // Validate coordinates are reasonable before proceeding
+  lv_coord_t chart_width = chart_content.x2 - chart_content.x1;
+  lv_coord_t chart_height = chart_content.y2 - chart_content.y1;
+  
+  if (chart_width <= 0 || chart_height <= 0) {
+    Serial.println("Target line: Invalid chart dimensions, skipping update");
+    return;
+  }
   
   const float yMax = 30.f;  // Chart range [0-30]
   
-  // Calculate Y position for 10-minute target using SAME square root scaling as bars
-  // This matches the scaling used in ui_update_block_intervals()
+  // Calculate Y position for 10-minute target using square root scaling like bars
   float target_minutes = 10.f;
   float target_frac = sqrt(target_minutes / yMax);  // Square root scaling like bars
-  lv_coord_t chart_height = chart_area.y2 - chart_area.y1;
-  lv_coord_t target_y = chart_height - (lv_coord_t)(target_frac * chart_height);
   
-  // Create horizontal line points in chart content coordinate space
+  // Calculate target line Y position relative to card
+  lv_coord_t target_y_from_bottom = (lv_coord_t)(target_frac * chart_height);
+  lv_coord_t target_y_absolute = chart_content.y2 - target_y_from_bottom;
+  lv_coord_t target_y_card_relative = target_y_absolute - card_area.y1;
+  
+  // Create horizontal line across chart width relative to card
+  lv_coord_t line_x1_card_relative = chart_content.x1 - card_area.x1;
+  lv_coord_t line_x2_card_relative = chart_content.x2 - card_area.x1;
+  
+  // Validate final coordinates
+  if (line_x2_card_relative <= line_x1_card_relative) {
+    Serial.printf("Target line: Invalid X coordinates x1=%d, x2=%d, skipping\n", 
+                  line_x1_card_relative, line_x2_card_relative);
+    return;
+  }
+  
   lv_point_t pts[2] = { 
-    {0, target_y}, 
-    {chart_area.x2 - chart_area.x1, target_y} 
+    {line_x1_card_relative, target_y_card_relative}, 
+    {line_x2_card_relative, target_y_card_relative} 
   };
   lv_line_set_points(ivTargetLine, pts, 2);
   
-  // Position the line within the chart content area
-  lv_obj_set_pos(ivTargetLine, 0, 0);
+  // Debug output to check coordinates
+  Serial.printf("Target line: x1=%d, x2=%d, y=%d (w=%d, h=%d)\n", 
+                line_x1_card_relative, line_x2_card_relative, target_y_card_relative,
+                chart_width, chart_height);
   
-  // Force refresh
+  // Force refresh and move to front
+  lv_obj_move_foreground(ivTargetLine);
   lv_obj_invalidate(ivTargetLine);
 }
 
-// Create the row of 12 labels beneath the chart; call once from create_metrics_screen()
+// Create the row of 10 labels beneath the chart with perfect bar alignment
 static void ensure_block_label_row() {
   if (intervalLabelRow) return;
 
   intervalLabelRow = lv_obj_create(intervalCard);
   lv_obj_remove_style_all(intervalLabelRow);
-  lv_obj_set_size(intervalLabelRow, LV_PCT(100), LV_SIZE_CONTENT);
+  lv_obj_set_size(intervalLabelRow, LV_PCT(100), 20);  // Fixed height for consistency
   lv_obj_set_style_bg_opa(intervalLabelRow, LV_OPA_TRANSP, 0);
-  lv_obj_set_style_pad_top(intervalLabelRow, 2, 0);  // Minimal spacing for tight alignment
-  
-  // Better alignment with chart bars - match chart's internal padding
-  lv_obj_set_style_pad_left(intervalLabelRow, 20, 0);   // Fine-tuned for bar alignment
-  lv_obj_set_style_pad_right(intervalLabelRow, 20, 0);  // Fine-tuned for bar alignment
+  lv_obj_set_style_pad_all(intervalLabelRow, 0, 0);  // No padding for precise control
 
-  // Even spacing under the 12 bars with improved distribution
-  lv_obj_set_flex_flow(intervalLabelRow, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(intervalLabelRow,
-                        LV_FLEX_ALIGN_SPACE_EVENLY,  // Even distribution under bars
-                        LV_FLEX_ALIGN_CENTER,
-                        LV_FLEX_ALIGN_CENTER);
-
-  for (int i = 0; i < 12; ++i) {
+  for (int i = 0; i < 10; ++i) {
     blockNumLabels[i] = lv_label_create(intervalLabelRow);
     lv_obj_set_style_text_color(blockNumLabels[i], lv_color_hex(0x9AA0A6), 0);
-    lv_obj_set_style_text_font(blockNumLabels[i], &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_align(blockNumLabels[i], LV_TEXT_ALIGN_CENTER, 0);  // Center align labels  
+    lv_obj_set_style_text_font(blockNumLabels[i], &lv_font_montserrat_12, 0);  // Larger font for readability
     lv_obj_set_style_text_align(blockNumLabels[i], LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_text(blockNumLabels[i], ""); // init empty
+    lv_label_set_text(blockNumLabels[i], "");  // Start empty
+    // Set wider label to fit 7-digit block numbers on single line
+    lv_obj_set_size(blockNumLabels[i], 50, 20);  // 50px wide for 7-digit numbers
+  }
+  
+  // Position labels to perfectly align with chart bars
+  update_block_label_positions();
+}
+
+// Update label positions to match chart bar positions exactly
+static void update_block_label_positions() {
+  if (!intervalChart || !intervalLabelRow) return;
+  
+  // Get chart content area where bars are drawn
+  lv_area_t chart_content, card_area, label_row_area;
+  lv_obj_get_content_coords(intervalChart, &chart_content);
+  lv_obj_get_coords(intervalCard, &card_area);
+  lv_obj_get_coords(intervalLabelRow, &label_row_area);
+  
+  lv_coord_t chart_width = chart_content.x2 - chart_content.x1;
+  lv_coord_t chart_start_x = chart_content.x1 - card_area.x1;  // Relative to card
+  
+  // More precise bar positioning accounting for LVGL chart padding
+  lv_coord_t point_count = 10;
+  lv_coord_t series_width = chart_width;
+  
+  // LVGL charts add padding around the data points
+  lv_coord_t chart_pad_left = chart_width / (point_count * 2);   // Left padding
+  lv_coord_t chart_pad_right = chart_pad_left;                   // Right padding
+  lv_coord_t usable_width = series_width - chart_pad_left - chart_pad_right;
+  lv_coord_t bar_spacing = usable_width / (point_count - 1);     // Space between bar centers
+  
+  for (int i = 0; i < 10; ++i) {
+    if (!blockNumLabels[i]) continue;
     
-    // Set explicit width to ensure consistent spacing
-    lv_obj_set_width(blockNumLabels[i], 45);  // Slightly wider for better alignment
+    // Calculate precise center position of each bar including chart padding
+    lv_coord_t bar_center_x;
+    if (point_count == 1) {
+      bar_center_x = chart_start_x + chart_pad_left + (usable_width / 2);
+    } else {
+      bar_center_x = chart_start_x + chart_pad_left + (i * bar_spacing);
+    }
+    
+    // Position label at bar center, relative to label row
+    lv_coord_t label_x = bar_center_x - (label_row_area.x1 - card_area.x1);
+    lv_obj_set_pos(blockNumLabels[i], label_x - 25, 0);  // -25 to center 50px wide labels
+    lv_obj_set_size(blockNumLabels[i], 50, 20);  // Wider for full block numbers
+    
+    // Debug output for first and last labels
+    if (i == 0 || i == 9) {
+      Serial.printf("Label[%d]: bar_center=%d, label_x=%d\n", i, bar_center_x, label_x - 25);
+    }
   }
 }
 
@@ -1465,7 +1543,7 @@ lv_obj_set_size(intervalChart, 640, 90);  // Reduced height to match HTML bars s
 lv_obj_set_style_bg_opa(intervalChart, LV_OPA_TRANSP, 0);
 lv_obj_set_style_border_width(intervalChart, 0, 0);
 lv_chart_set_type(intervalChart, LV_CHART_TYPE_BAR);
-lv_chart_set_point_count(intervalChart, 12);
+lv_chart_set_point_count(intervalChart, 10);
 lv_chart_set_div_line_count(intervalChart, 0, 0);
 lv_chart_set_update_mode(intervalChart, LV_CHART_UPDATE_MODE_SHIFT);
 lv_chart_set_range(intervalChart, LV_CHART_AXIS_PRIMARY_Y, 0, 30);  // Match HTML maxM range
@@ -1502,28 +1580,28 @@ lv_obj_add_style(intervalChart, &st_interval_bars, LV_PART_ITEMS);
 
 
 
-// create dashed 10-minute target line over the chart
+// Create enhanced interval visualization with proper 10-minute reference line
 if (!ivTargetLine) {
-  ivTargetLine = lv_line_create(intervalChart);  // Create as child of chart, not card
+  // Create line as child of intervalCard for proper coordinate control
+  ivTargetLine = lv_line_create(intervalCard);
   lv_obj_add_flag(ivTargetLine, LV_OBJ_FLAG_IGNORE_LAYOUT);
-  lv_obj_set_style_line_width(ivTargetLine, 2, 0);
-  lv_obj_set_style_line_dash_width(ivTargetLine, 6, 0);
-  lv_obj_set_style_line_dash_gap(ivTargetLine, 6, 0);
-  // color complements bars; apply_accent_to_interval() will keep it in sync
+  lv_obj_set_style_line_width(ivTargetLine, 3, 0);  // Thicker for visibility
+  lv_obj_set_style_line_dash_width(ivTargetLine, 8, 0);  // Longer dashes
+  lv_obj_set_style_line_dash_gap(ivTargetLine, 4, 0);   // Shorter gaps
   lv_obj_set_style_line_color(ivTargetLine, ACC_PRIMARY(), 0);
+  lv_obj_set_style_line_opa(ivTargetLine, LV_OPA_80, 0);  // Slight transparency
 }
 
-// position it ~40–50% up, synced to chart range [0..25]
-iv_update_target_line();   // call after lv_chart_set_range(...)
+// Note: Target line positioning will be done after chart data is loaded via iv_update_target_line()
 // Create the block-number row under the chart
 ensure_block_label_row();
 
 
 
-// seed demo values 
-#if 0
-static const uint8_t kDemoIntervals[12] = { 9, 12, 7, 8, 11, 4, 16, 10, 6, 14, 9, 8 };
-ui_update_block_intervals(kDemoIntervals, 12);
+// seed demo values for testing
+#if 1
+static const uint8_t kDemoIntervals[10] = { 9, 12, 7, 8, 11, 4, 16, 10, 6, 14 };
+ui_update_block_intervals(kDemoIntervals, 10);
 #endif
 
 
