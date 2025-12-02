@@ -908,14 +908,15 @@ static void iv_update_target_line(bool force) {
     return;
   }
   
-  const float yMax = 30.f;  // Chart range [0-30]
+  const float MAX_MINUTES = 30.f;  // Match bar scaling exactly
   
-  // Calculate Y position for 10-minute target using square root scaling like bars
+  // Calculate Y position using EXACT same formula as bars
   float target_minutes = 10.f;
-  float target_frac = sqrt(target_minutes / yMax);  // Square root scaling like bars
+  float target_frac = sqrt(target_minutes / MAX_MINUTES);  // Same as bar calculation
+  int target_scaled = (int)(target_frac * MAX_MINUTES);  // Same conversion as bars
   
-  // Calculate target line Y position relative to card
-  lv_coord_t target_y_from_bottom = (lv_coord_t)(target_frac * chart_height);
+  // Calculate Y position using LVGL chart coordinate system
+  lv_coord_t target_y_from_bottom = (target_scaled * chart_height) / 30;  // Chart range 0-30
   lv_coord_t target_y_absolute = chart_content.y2 - target_y_from_bottom;
   lv_coord_t target_y_card_relative = target_y_absolute - card_area.y1;
   
@@ -936,9 +937,9 @@ static void iv_update_target_line(bool force) {
   };
   lv_line_set_points(ivTargetLine, pts, 2);
   
-  // Debug output to check coordinates
-  Serial.printf("Target line: x1=%d, x2=%d, y=%d (w=%d, h=%d)\n", 
-                line_x1_card_relative, line_x2_card_relative, target_y_card_relative,
+  // Enhanced debug output
+  Serial.printf("🎯 Target line: 10min→scaled=%d, y=%d, x=%d→%d (chart=%dx%d)\n", 
+                target_scaled, target_y_card_relative, line_x1_card_relative, line_x2_card_relative,
                 chart_width, chart_height);
   
   // Yield to prevent watchdog timeout during LVGL operations
@@ -986,35 +987,33 @@ static void update_block_label_positions() {
   lv_coord_t chart_width = chart_content.x2 - chart_content.x1;
   lv_coord_t chart_start_x = chart_content.x1 - card_area.x1;  // Relative to card
   
-  // More precise bar positioning accounting for LVGL chart padding
-  lv_coord_t point_count = 10;
-  lv_coord_t series_width = chart_width;
+  if (chart_width <= 10) {
+    Serial.println("Invalid chart width for label positioning");
+    return;
+  }
   
-  // LVGL charts add padding around the data points
-  lv_coord_t chart_pad_left = chart_width / (point_count * 2);   // Left padding
-  lv_coord_t chart_pad_right = chart_pad_left;                   // Right padding
-  lv_coord_t usable_width = series_width - chart_pad_left - chart_pad_right;
-  lv_coord_t bar_spacing = usable_width / (point_count - 1);     // Space between bar centers
+  // Use LVGL chart's internal point positioning for perfect alignment
+  lv_coord_t point_count = 10;
   
   for (int i = 0; i < 10; ++i) {
     if (!blockNumLabels[i]) continue;
     
-    // Calculate precise center position of each bar including chart padding
-    lv_coord_t bar_center_x;
-    if (point_count == 1) {
-      bar_center_x = chart_start_x + chart_pad_left + (usable_width / 2);
-    } else {
-      bar_center_x = chart_start_x + chart_pad_left + (i * bar_spacing);
-    }
+    // Get actual bar position using LVGL's chart coordinate system
+    lv_point_t point;
+    lv_chart_get_point_pos_by_id(intervalChart, intervalSeries, i, &point);
     
-    // Position label at bar center, relative to label row
+    // Convert chart point to card-relative coordinates
+    lv_coord_t bar_center_x = point.x + (chart_start_x);
     lv_coord_t label_x = bar_center_x - (label_row_area.x1 - card_area.x1);
+    
+    // Center the 50px wide label on the bar center
     lv_obj_set_pos(blockNumLabels[i], label_x - 25, 0);  // -25 to center 50px wide labels
     lv_obj_set_size(blockNumLabels[i], 50, 20);  // Wider for full block numbers
     
     // Debug output for first and last labels
     if (i == 0 || i == 9) {
-      Serial.printf("Label[%d]: bar_center=%d, label_x=%d\n", i, bar_center_x, label_x - 25);
+      Serial.printf("🏷️ Label[%d]: chart_point=(%d,%d), bar_center=%d, label_x=%d\n", 
+                    i, point.x, point.y, bar_center_x, label_x - 25);
     }
   }
 }
