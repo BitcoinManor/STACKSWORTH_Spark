@@ -215,7 +215,7 @@ lv_obj_t* create_world_screen() {
 
   lv_obj_t* timeTitle = lv_label_create(timeCard);
   lv_obj_add_style(timeTitle, &ui::st_title, 0);
-  lv_label_set_text(timeTitle, "🕒 CURRENT TIME");
+  lv_label_set_text(timeTitle, "CURRENT TIME");
   lv_obj_align(timeTitle, LV_ALIGN_TOP_MID, 0, 5);
 
   timeLabel = lv_label_create(timeCard);
@@ -229,15 +229,15 @@ lv_obj_t* create_world_screen() {
   lv_obj_set_style_text_font(dateLabel, &lv_font_montserrat_16, 0);
   lv_obj_align(dateLabel, LV_ALIGN_BOTTOM_MID, 0, -5);
 
-  // === LOCATION CARD (Bottom Left) ===
+  // === LOCATION CARD (Bottom Left) - Closer to bottom ===
   lv_obj_t* locationCard = ui::make_card(scr);
-  lv_obj_set_size(locationCard, 360, 180);
-  lv_obj_align(locationCard, LV_ALIGN_BOTTOM_LEFT, 50, -80);
+  lv_obj_set_size(locationCard, 310, 180);
+  lv_obj_align(locationCard, LV_ALIGN_BOTTOM_LEFT, 50, -30);  // Changed from -80 to -30
   lv_obj_set_style_pad_all(locationCard, 20, 0);
 
   lv_obj_t* locationTitle = lv_label_create(locationCard);
   lv_obj_add_style(locationTitle, &ui::st_title, 0);
-  lv_label_set_text(locationTitle, "📍 LOCATION");
+  lv_label_set_text(locationTitle, "LOCATION");
   lv_obj_align(locationTitle, LV_ALIGN_TOP_MID, 0, 5);
 
   locationLabel = lv_label_create(locationCard);
@@ -248,15 +248,15 @@ lv_obj_t* create_world_screen() {
   lv_obj_set_width(locationLabel, LV_PCT(90));
   lv_obj_align(locationLabel, LV_ALIGN_CENTER, 0, 20);
 
-  // === WEATHER CARD (Bottom Right) ===
+  // === WEATHER CARD (Bottom Right) - Closer to bottom ===
   lv_obj_t* weatherCard = ui::make_card(scr);
-  lv_obj_set_size(weatherCard, 360, 180);
-  lv_obj_align(weatherCard, LV_ALIGN_BOTTOM_RIGHT, -50, -80);
+  lv_obj_set_size(weatherCard, 310, 180);
+  lv_obj_align(weatherCard, LV_ALIGN_BOTTOM_RIGHT, -50, -30);  // Changed from -80 to -30
   lv_obj_set_style_pad_all(weatherCard, 20, 0);
 
   lv_obj_t* weatherTitle = lv_label_create(weatherCard);
   lv_obj_add_style(weatherTitle, &ui::st_title, 0);
-  lv_label_set_text(weatherTitle, "🌤️ WEATHER");
+  lv_label_set_text(weatherTitle, "WEATHER");
   lv_obj_align(weatherTitle, LV_ALIGN_TOP_MID, 0, 5);
 
   weatherLabel = lv_label_create(weatherCard);
