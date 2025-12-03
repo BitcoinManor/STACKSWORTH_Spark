@@ -847,34 +847,67 @@ static bool geocode_city(String city, float &lat, float &lon,
 // Current weather via Open-Meteo
 static bool fetch_weather(float lat, float lon, int &tempC, String &condition) {
   if (lat == 0 && lon == 0) return false;
+  
+  // Safety: Check WiFi connection before making request
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("❌ Weather fetch: WiFi not connected");
+    return false;
+  }
+  
+  // Safety: Feed watchdog before network operation
+  esp_task_wdt_reset();
 
   WiFiClientSecure client;
   client.setInsecure();  // baby-step
+  client.setTimeout(5000);  // 5 second timeout to prevent hanging
 
   HTTPClient http;
   String url = "https://api.open-meteo.com/v1/forecast?latitude=" + String(lat, 6) +
                "&longitude=" + String(lon, 6) +
                "&current=temperature_2m,weather_code&timezone=auto";
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  if (!http.begin(client, url)) return false;
+  http.setTimeout(5000);  // HTTP timeout
+  
+  if (!http.begin(client, url)) {
+    Serial.println("❌ Weather fetch: HTTP begin failed");
+    return false;
+  }
 
+  Serial.println("🌐 Fetching weather data...");
   int code = http.GET();
-  if (code != 200) { http.end(); return false; }
+  if (code != 200) { 
+    Serial.printf("❌ Weather fetch: HTTP %d\n", code);
+    http.end(); 
+    return false; 
+  }
 
   String payload = http.getString();
   http.end();
-  if (!payload.length()) return false;
+  
+  // Safety: Feed watchdog after network operation
+  esp_task_wdt_reset();
+  
+  if (!payload.length()) {
+    Serial.println("❌ Weather fetch: Empty response");
+    return false;
+  }
 
   DynamicJsonDocument doc(1024);
-  if (deserializeJson(doc, payload)) return false;
+  if (deserializeJson(doc, payload)) {
+    Serial.println("❌ Weather fetch: JSON parse failed");
+    return false;
+  }
 
   float t = doc["current"]["temperature_2m"] | NAN;
   int   w = doc["current"]["weather_code"]   | -1;
-  if (isnan(t) || w < 0) return false;
+  if (isnan(t) || w < 0) {
+    Serial.println("❌ Weather fetch: Invalid data in response");
+    return false;
+  }
 
   tempC = (int)t;
   condition = mapWeatherCode(w);
-  Serial.printf("⛅ Weather: %d°C, %s (code %d)\n", tempC, condition.c_str(), w);
+  Serial.printf("✅ Weather: %d°C, %s (code %d)\n", tempC, condition.c_str(), w);
   return true;
 }
 
@@ -1079,7 +1112,7 @@ enum PortalAnimState { IDLE, SAVING, SAVED, REBOOTING };
 static PortalAnimState animState = IDLE;
 static unsigned long animStartTime = 0;
 
-// Portal animation timer callback
+// Portal animation timer callback - simplified to prevent crashes
 static void portal_anim_timer_cb(lv_timer_t* timer) {
   if (!portalCard || !portalStatusLabel) return;
   
@@ -1087,35 +1120,34 @@ static void portal_anim_timer_cb(lv_timer_t* timer) {
   
   switch(animState) {
     case SAVING:
-      // Pulse orange border (0-1500ms) - longer for smoother effect
-      if (elapsed < 1500) {
-        float pulse = (sin(elapsed * 0.004) + 1.0f) * 0.5f; // Slower sine wave
-        uint8_t orange_val = 150 + (105 * pulse); // 150-255 range for smooth orange
-        lv_obj_set_style_border_color(portalCard, lv_color_make(orange_val, orange_val/3, 0), 0);
+      // Simple solid orange (0-800ms)
+      if (elapsed < 800) {
+        lv_obj_set_style_border_color(portalCard, lv_color_hex(0xFF8800), 0);
+        lv_obj_set_style_border_width(portalCard, 3, 0);
       } else {
         animState = SAVED;
         animStartTime = millis();
-        lv_label_set_text(portalStatusLabel, "Saved!");
+        lv_label_set_text(portalStatusLabel, "✅ Saved!");
       }
       break;
       
     case SAVED:
-      // Hold green for 1000ms
-      if (elapsed < 1000) {
+      // Simple solid green for 800ms
+      if (elapsed < 800) {
         lv_obj_set_style_border_color(portalCard, lv_color_hex(0x00FF88), 0);
+        lv_obj_set_style_border_width(portalCard, 3, 0);
       } else {
         animState = REBOOTING;
         animStartTime = millis();
-        lv_label_set_text(portalStatusLabel, "Rebooting...");
+        lv_label_set_text(portalStatusLabel, "🔄 Rebooting...");
       }
       break;
       
     case REBOOTING:
-      // Pulse red (1500ms)
-      if (elapsed < 1500) {
-        float pulse = (sin(elapsed * 0.005) + 1.0f) * 0.5f; // Slower red pulse
-        uint8_t red_val = 120 + (135 * pulse); // 120-255 range
-        lv_obj_set_style_border_color(portalCard, lv_color_make(red_val, 0, 0), 0);
+      // Simple solid red (800ms)
+      if (elapsed < 800) {
+        lv_obj_set_style_border_color(portalCard, lv_color_hex(0xFF4444), 0);
+        lv_obj_set_style_border_width(portalCard, 4, 0);
       } else {
         // Animation complete - stop timer
         lv_timer_del(portalAnimTimer);
