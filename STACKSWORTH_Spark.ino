@@ -540,11 +540,40 @@ bool connectWiFiFromPrefs(uint32_t timeoutMs) {
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);  // Enable automatic reconnection
   WiFi.setSleep(false);         // Disable WiFi sleep mode for stability
+  
+  // Aggressive settings for overnight stability
+  WiFi.setTxPower(WIFI_POWER_19_5dBm);  // Maximum transmission power
+  esp_wifi_set_ps(WIFI_PS_NONE);        // Disable ALL power saving modes
+  Serial.println("💪 Enhanced WiFi power settings for 24/7 operation");
+  
+  // Aggressive settings for 24/7 operation
+  WiFi.setTxPower(WIFI_POWER_19_5dBm);  // Maximum power
+  esp_wifi_set_ps(WIFI_PS_NONE);        // Disable all power saving
+  Serial.println("💪 Enhanced WiFi stability for overnight operation");
+  
+  // Aggressive keep-alive settings for overnight stability
+  WiFi.setTxPower(WIFI_POWER_19_5dBm);  // Maximum power for stable connection
+  // Note: Advanced ESP32 power settings removed for compatibility
+  
+  Serial.println("💪 Enhanced WiFi settings for 24/7 operation");
   WiFi.begin(ssid.c_str(), pass.c_str());
   Serial.printf("🌐 Connecting to %s", ssid.c_str());
   uint32_t start = millis();
+  uint32_t lastCheck = 0;
+  
   while (WiFi.status() != WL_CONNECTED && millis() - start < timeoutMs) {
-    delay(250); Serial.print(".");
+    // Non-blocking: only check WiFi status every 500ms
+    if (millis() - lastCheck > 500) {
+      lastCheck = millis();
+      Serial.print(".");
+      
+      // Keep UI responsive during connection attempts
+      lv_timer_handler();
+      yield();  // Feed watchdog
+    }
+    
+    // Very short delay to prevent CPU spinning
+    delay(10);
   }
   Serial.println();
   if (WiFi.status() == WL_CONNECTED) {
@@ -855,7 +884,7 @@ static bool fetch_weather(float lat, float lon, int &tempC, String &condition) {
   }
   
   // Safety: Feed watchdog before network operation
-  esp_task_wdt_reset();
+  yield();
 
   WiFiClientSecure client;
   client.setInsecure();  // baby-step
@@ -885,7 +914,7 @@ static bool fetch_weather(float lat, float lon, int &tempC, String &condition) {
   http.end();
   
   // Safety: Feed watchdog after network operation
-  esp_task_wdt_reset();
+  yield();
   
   if (!payload.length()) {
     Serial.println("❌ Weather fetch: Empty response");
@@ -2028,6 +2057,67 @@ void fetchBitcoinChartData(lv_chart_series_t* series, lv_obj_t* chart) {
  //bool isLeftOn = false;  
  //bool isRightOn = false;
  
+// =========================== SWIPE GESTURE SUPPORT ===========================
+// Global swipe detection variables
+static bool touch_started = false;
+static lv_point_t touch_start_point;
+static uint32_t touch_start_time;
+
+// Handle swipe gestures for screen navigation
+void handle_swipe_gesture(lv_event_t* e) {
+  lv_event_code_t code = lv_event_get_code(e);
+  lv_indev_t* indev = lv_indev_get_act();
+  
+  if (!indev) return;
+  
+  lv_point_t point;
+  lv_indev_get_point(indev, &point);
+  
+  switch(code) {
+    case LV_EVENT_PRESSED:
+      touch_started = true;
+      touch_start_point = point;
+      touch_start_time = millis();
+      break;
+      
+    case LV_EVENT_RELEASED:
+      if (touch_started) {
+        uint32_t duration = millis() - touch_start_time;
+        int dx = point.x - touch_start_point.x;
+        int dy = point.y - touch_start_point.y;
+        
+        // Detect horizontal swipe (minimum 100px, max 800ms)
+        if (abs(dx) > 100 && abs(dy) < 80 && duration < 800) {
+          if (dx > 0) {
+            Serial.println("👉 Swipe right: Previous screen");
+            int current = getCurrentScreen();
+            int prev = (current == 0) ? 3 : current - 1;
+            load_screen(prev);
+          } else {
+            Serial.println("👈 Swipe left: Next screen");
+            int current = getCurrentScreen();
+            int next = (current + 1) % 4;
+            load_screen(next);
+          }
+        }
+        touch_started = false;
+      }
+      break;
+      
+    default:
+      break;
+  }
+}
+
+// Add swipe gesture support for screen navigation
+void setup_swipe_gestures() {
+  lv_obj_add_event_cb(lv_scr_act(), handle_swipe_gesture, LV_EVENT_PRESSED, NULL);
+  lv_obj_add_event_cb(lv_scr_act(), handle_swipe_gesture, LV_EVENT_RELEASED, NULL);
+  Serial.println("👆 Swipe gestures enabled (left/right to change screens)");
+}
+
+// =========================== MAIN SETUP/LOOP ===========================
+ 
  
  
  void setup() {
@@ -2097,6 +2187,9 @@ ui_weather_set_time(String());
   //  Initialize display + LVGL
   // 1. Boot LVGL + LCD
   lcd_init();
+  
+  // Enable swipe gestures after display initialization (moved to end of setup)
+  delay(500);  // Let display settle
 
   // ---- FIRST FRAME BUG FIX FOR ST7262 ----
   // Force full-screen black to wipe corrupt right-edge/bottom rows
@@ -2178,16 +2271,42 @@ ui_weather_set_time(String());
     delay(500);
     fetchBitcoinData();
     fetchBitcoinChartData(priceSeries, priceChart);
+    
+    // Enable swipe gestures now that everything is ready
+    setup_swipe_gestures();
   }
 
    
    
 void loop() {
+  static uint32_t lastWiFiHealthCheck = 0;
+  
   if (portalModeActive) {
     dns.processNextRequest();   // keep the captive portal DNS responsive
   } else {
     // Monitor WiFi connection when not in portal mode
     checkWiFiConnection();
+    
+    // Additional WiFi health check every 30 seconds
+    if (millis() - lastWiFiHealthCheck > 30000) {
+      lastWiFiHealthCheck = millis();
+      
+      if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("🔄 WiFi health check: Connection lost, attempting recovery");
+        WiFi.reconnect();
+        
+        // Quick non-blocking check
+        uint32_t reconnect_start = millis();
+        while (WiFi.status() != WL_CONNECTED && millis() - reconnect_start < 3000) {
+          lv_timer_handler();  // Keep UI responsive
+          delay(50);
+        }
+        
+        if (WiFi.status() == WL_CONNECTED) {
+          Serial.println("✅ WiFi recovered successfully");
+        }
+      }
+    }
   }
   
    static unsigned long lastUpdate = 0;
@@ -2195,7 +2314,13 @@ void loop() {
      fetchBitcoinData();
      yield(); // Feed watchdog after data fetch
      lastUpdate = millis();
-   }static unsigned long t_hash = 0, t_blocks = 0, t_meta = 0;
+   }
+   
+   // Handle LVGL tasks - this keeps the UI responsive
+   lv_timer_handler();
+   delay(5);
+   
+   static unsigned long t_hash = 0, t_blocks = 0, t_meta = 0;
 unsigned long nowMs = millis();
 
 if (nowMs - t_hash   > 30000UL) { fetch_hashrate_and_diff();   t_hash = nowMs; yield(); }
