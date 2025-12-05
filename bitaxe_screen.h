@@ -1,5 +1,5 @@
 // BLOKDBIT_Spark bitaxe_screen.h
-// SPARKv0.03
+// SPARKv1.0.0
 
 #pragma once
 #include <lvgl.h>
@@ -25,3 +25,7 @@ extern lv_style_t greenStyle;
 extern lv_style_t blueStyle;
 
 lv_obj_t* create_bitaxe_screen();
+
+// Update function to refresh Bitaxe data (call from main loop)
+// Default IP: 10.0.0.200 (standard AxeOS default)
+void ui_update_bitaxe_screen(const char* bitaxe_ip = "10.0.0.200");
