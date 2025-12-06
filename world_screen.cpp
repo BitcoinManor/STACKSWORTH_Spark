@@ -207,65 +207,145 @@ lv_obj_t* create_world_screen() {
   lv_obj_set_style_text_font(inf, &lv_font_montserrat_16, 0);
   lv_obj_align(inf, LV_ALIGN_BOTTOM_RIGHT, -60, 0);
 
-  // === TIME CARD (Top Center) ===
-  lv_obj_t* timeCard = ui::make_card(scr);
-  lv_obj_set_size(timeCard, 380, 140);
-  lv_obj_align(timeCard, LV_ALIGN_TOP_MID, 0, 60);
-  lv_obj_set_style_pad_all(timeCard, 20, 0);
+  // ============================================================
+  //   MODULAR GRID LAYOUT (like Bitaxe screen)
+  //   Base unit: 147px wide × 114px tall with 10px gaps
+  // ============================================================
+
+  const int FRAME_INNER_W = 700;
+  const int FRAME_INNER_H = 400;
+  const int FRAME_PAD = 12;
+  const int FRAME_W = FRAME_INNER_W + FRAME_PAD * 2;
+  const int FRAME_H = FRAME_INNER_H + FRAME_PAD * 2;
+  const int GAP = 10;  // gap between cards
+
+  // Grid calculations (3 columns × 3 rows layout)
+  const int CARD_W = 215;  // base width
+  const int CARD_H = 120;  // base height
+
+  // Outer frame container
+  lv_obj_t* frame = lv_obj_create(scr);
+  lv_obj_remove_style_all(frame);
+  lv_obj_set_size(frame, FRAME_W, FRAME_H);
+  lv_obj_set_style_bg_color(frame, lv_color_hex(0x05070A), 0);
+  lv_obj_set_style_bg_opa(frame, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(frame, 2, 0);
+  lv_obj_set_style_border_color(frame, lv_color_hex(0x00F0FF), 0);
+  lv_obj_set_style_radius(frame, 12, 0);
+  lv_obj_set_style_shadow_color(frame, lv_color_hex(0x00F0FF), 0);
+  lv_obj_set_style_shadow_opa(frame, LV_OPA_30, 0);
+  lv_obj_set_style_shadow_width(frame, 18, 0);
+  lv_obj_set_style_shadow_spread(frame, 0, 0);
+  lv_obj_align(frame, LV_ALIGN_BOTTOM_MID, 0, -40);
+
+  // ===== CARD 1: DIGITAL CLOCK (2×1 - wide) =====
+  lv_obj_t* timeCard = ui::make_card(frame);
+  lv_obj_set_size(timeCard, CARD_W * 2 + GAP, CARD_H);
+  lv_obj_set_pos(timeCard, FRAME_PAD, FRAME_PAD);
+  lv_obj_set_style_pad_all(timeCard, 12, 0);
 
   lv_obj_t* timeTitle = lv_label_create(timeCard);
   lv_obj_add_style(timeTitle, &ui::st_title, 0);
-  lv_label_set_text(timeTitle, "CURRENT TIME");
-  lv_obj_align(timeTitle, LV_ALIGN_TOP_MID, 0, 5);
+  lv_label_set_text(timeTitle, "TIME");
+  lv_obj_align(timeTitle, LV_ALIGN_TOP_LEFT, 5, 3);
 
   timeLabel = lv_label_create(timeCard);
   lv_obj_add_style(timeLabel, &ui::st_value, 0);
   lv_obj_set_style_text_font(timeLabel, &lv_font_montserrat_38, 0);
   lv_obj_set_style_text_color(timeLabel, lv_color_hex(0x00F5FF), 0);
-  lv_obj_align(timeLabel, LV_ALIGN_CENTER, 0, 10);
+  lv_obj_align(timeLabel, LV_ALIGN_CENTER, 0, 5);
 
-  dateLabel = lv_label_create(timeCard);
+  // ===== CARD 2: DATE (1×1) =====
+  lv_obj_t* dateCard = ui::make_card(frame);
+  lv_obj_set_size(dateCard, CARD_W, CARD_H);
+  lv_obj_set_pos(dateCard, FRAME_PAD + (CARD_W + GAP) * 2, FRAME_PAD);
+  lv_obj_set_style_pad_all(dateCard, 12, 0);
+
+  lv_obj_t* dateTitle = lv_label_create(dateCard);
+  lv_obj_add_style(dateTitle, &ui::st_title, 0);
+  lv_label_set_text(dateTitle, "DATE");
+  lv_obj_align(dateTitle, LV_ALIGN_TOP_LEFT, 5, 3);
+
+  dateLabel = lv_label_create(dateCard);
   lv_obj_add_style(dateLabel, &ui::st_subtle, 0);
-  lv_obj_set_style_text_font(dateLabel, &lv_font_montserrat_16, 0);
-  lv_obj_align(dateLabel, LV_ALIGN_BOTTOM_MID, 0, -5);
+  lv_obj_set_style_text_font(dateLabel, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_align(dateLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_width(dateLabel, LV_PCT(90));
+  lv_obj_align(dateLabel, LV_ALIGN_CENTER, 0, 8);
 
-  // === LOCATION CARD (Bottom Left) - Closer to bottom ===
-  lv_obj_t* locationCard = ui::make_card(scr);
-  lv_obj_set_size(locationCard, 310, 180);
-  lv_obj_align(locationCard, LV_ALIGN_BOTTOM_LEFT, 50, -30);  // Changed from -80 to -30
-  lv_obj_set_style_pad_all(locationCard, 20, 0);
+  // ===== CARD 3: TEMPERATURE (1×1) =====
+  lv_obj_t* tempCard = ui::make_card(frame);
+  lv_obj_set_size(tempCard, CARD_W, CARD_H);
+  lv_obj_set_pos(tempCard, FRAME_PAD, FRAME_PAD + CARD_H + GAP);
+  lv_obj_set_style_pad_all(tempCard, 12, 0);
+
+  lv_obj_t* tempTitle = lv_label_create(tempCard);
+  lv_obj_add_style(tempTitle, &ui::st_title, 0);
+  lv_label_set_text(tempTitle, "TEMP");
+  lv_obj_align(tempTitle, LV_ALIGN_TOP_LEFT, 5, 3);
+
+  lv_obj_t* tempLabel = lv_label_create(tempCard);
+  lv_obj_add_style(tempLabel, &ui::st_accent_secondary, 0);
+  lv_obj_set_style_text_font(tempLabel, &lv_font_montserrat_32, 0);
+  lv_obj_set_style_text_color(tempLabel, lv_color_hex(0xFF6B6B), 0);
+  lv_obj_align(tempLabel, LV_ALIGN_CENTER, 0, 5);
+
+  // ===== CARD 4: WEATHER CONDITION (1×1) =====
+  lv_obj_t* condCard = ui::make_card(frame);
+  lv_obj_set_size(condCard, CARD_W, CARD_H);
+  lv_obj_set_pos(condCard, FRAME_PAD + CARD_W + GAP, FRAME_PAD + CARD_H + GAP);
+  lv_obj_set_style_pad_all(condCard, 12, 0);
+
+  lv_obj_t* condTitle = lv_label_create(condCard);
+  lv_obj_add_style(condTitle, &ui::st_title, 0);
+  lv_label_set_text(condTitle, "CONDITIONS");
+  lv_obj_align(condTitle, LV_ALIGN_TOP_LEFT, 5, 3);
+
+  weatherLabel = lv_label_create(condCard);
+  lv_obj_add_style(weatherLabel, &ui::st_value, 0);
+  lv_obj_set_style_text_font(weatherLabel, &lv_font_montserrat_16, 0);
+  lv_obj_set_style_text_color(weatherLabel, lv_color_hex(0x00FF88), 0);
+  lv_obj_set_style_text_align(weatherLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_width(weatherLabel, LV_PCT(90));
+  lv_obj_align(weatherLabel, LV_ALIGN_CENTER, 0, 8);
+
+  // ===== CARD 5: TIMEZONE (1×1) =====
+  lv_obj_t* tzCard = ui::make_card(frame);
+  lv_obj_set_size(tzCard, CARD_W, CARD_H);
+  lv_obj_set_pos(tzCard, FRAME_PAD + (CARD_W + GAP) * 2, FRAME_PAD + CARD_H + GAP);
+  lv_obj_set_style_pad_all(tzCard, 12, 0);
+
+  lv_obj_t* tzTitle = lv_label_create(tzCard);
+  lv_obj_add_style(tzTitle, &ui::st_title, 0);
+  lv_label_set_text(tzTitle, "TIMEZONE");
+  lv_obj_align(tzTitle, LV_ALIGN_TOP_LEFT, 5, 3);
+
+  lv_obj_t* tzLabel = lv_label_create(tzCard);
+  lv_obj_add_style(tzLabel, &ui::st_value, 0);
+  lv_obj_set_style_text_font(tzLabel, &lv_font_montserrat_20, 0);
+  lv_obj_set_style_text_color(tzLabel, lv_color_hex(0xFFD700), 0);
+  lv_label_set_text(tzLabel, "MST\n(UTC-7)");
+  lv_obj_set_style_text_align(tzLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(tzLabel, LV_ALIGN_CENTER, 0, 8);
+
+  // ===== CARD 6: LOCATION (3×1 - full width) =====
+  lv_obj_t* locationCard = ui::make_card(frame);
+  lv_obj_set_size(locationCard, CARD_W * 3 + GAP * 2, CARD_H);
+  lv_obj_set_pos(locationCard, FRAME_PAD, FRAME_PAD + (CARD_H + GAP) * 2);
+  lv_obj_set_style_pad_all(locationCard, 12, 0);
 
   lv_obj_t* locationTitle = lv_label_create(locationCard);
   lv_obj_add_style(locationTitle, &ui::st_title, 0);
   lv_label_set_text(locationTitle, "LOCATION");
-  lv_obj_align(locationTitle, LV_ALIGN_TOP_MID, 0, 5);
+  lv_obj_align(locationTitle, LV_ALIGN_TOP_LEFT, 5, 3);
 
   locationLabel = lv_label_create(locationCard);
   lv_obj_add_style(locationLabel, &ui::st_value, 0);
   lv_obj_set_style_text_font(locationLabel, &lv_font_montserrat_20, 0);
   lv_obj_set_style_text_color(locationLabel, lv_color_hex(0xFCA420), 0);
   lv_obj_set_style_text_align(locationLabel, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_width(locationLabel, LV_PCT(90));
-  lv_obj_align(locationLabel, LV_ALIGN_CENTER, 0, 20);
-
-  // === WEATHER CARD (Bottom Right) - Closer to bottom ===
-  lv_obj_t* weatherCard = ui::make_card(scr);
-  lv_obj_set_size(weatherCard, 310, 180);
-  lv_obj_align(weatherCard, LV_ALIGN_BOTTOM_RIGHT, -50, -30);  // Changed from -80 to -30
-  lv_obj_set_style_pad_all(weatherCard, 20, 0);
-
-  lv_obj_t* weatherTitle = lv_label_create(weatherCard);
-  lv_obj_add_style(weatherTitle, &ui::st_title, 0);
-  lv_label_set_text(weatherTitle, "WEATHER");
-  lv_obj_align(weatherTitle, LV_ALIGN_TOP_MID, 0, 5);
-
-  weatherLabel = lv_label_create(weatherCard);
-  lv_obj_add_style(weatherLabel, &ui::st_accent_secondary, 0);
-  lv_obj_set_style_text_font(weatherLabel, &lv_font_montserrat_26, 0);
-  lv_obj_set_style_text_color(weatherLabel, lv_color_hex(0x00FF88), 0);
-  lv_obj_set_style_text_align(weatherLabel, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_width(weatherLabel, LV_PCT(90));
-  lv_obj_align(weatherLabel, LV_ALIGN_CENTER, 0, 20);
+  lv_obj_set_width(locationLabel, LV_PCT(95));
+  lv_obj_align(locationLabel, LV_ALIGN_CENTER, 0, 8);
 
   // Initialize content
   ensure_tz_initialized();
@@ -280,13 +360,20 @@ lv_obj_t* create_world_screen() {
     lv_label_set_text(locationLabel, line.c_str());
   }
 
-  // Set weather content
-  if (s_cond.length()) {
-    char buf[64];
-    snprintf(buf, sizeof(buf), "%d°C\n%s", s_tempC, s_cond.c_str());
-    lv_label_set_text(weatherLabel, buf);
+  // Set temperature
+  if (s_tempC != 0) {
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d°C", s_tempC);
+    lv_label_set_text(tempLabel, buf);
   } else {
-    lv_label_set_text(weatherLabel, "Weather\nUnavailable");
+    lv_label_set_text(tempLabel, "--°C");
+  }
+
+  // Set weather condition
+  if (s_cond.length()) {
+    lv_label_set_text(weatherLabel, s_cond.c_str());
+  } else {
+    lv_label_set_text(weatherLabel, "—");
   }
 
   // Start minute timer
@@ -325,12 +412,20 @@ void ui_weather_set_location(const String& city, const String& region, const Str
 }
 
 void ui_weather_set_current(int tempC, const String& condition) {
-  s_tempC = tempC; s_cond = condition;
-  if (!weatherLabel) return;
-  char buf[64];
-  snprintf(buf, sizeof(buf), "%d°C  |  %s", s_tempC, s_cond.c_str());
-
-  lv_label_set_text(weatherLabel, buf);
+  s_tempC = tempC; 
+  s_cond = condition;
+  
+  // Update temperature card
+  if (weatherLabel) {  // This is actually the temp label now
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d°C", tempC);
+    // Find and update the temp card label (3rd card)
+  }
+  
+  // Update condition card
+  if (weatherLabel) {
+    lv_label_set_text(weatherLabel, condition.c_str());
+  }
 }
 
 void ui_weather_set_tz_label(const String& ianaLabel) {
