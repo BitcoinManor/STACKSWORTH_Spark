@@ -6,7 +6,7 @@
  *  Device      : ESP32-S3 Waveshare 7" Touchscreen (800x480)
  *  Description : Modular Bitcoin Dashboard UI using LVGL
  *  Designer    : Bitcoin Manor 🟧
- * 
+ *  Bitcoinmanor.com STACKSWORTH.COM 
  *  
  *  💡 Easter Egg: Try tapping the infinity label in v0.1 😉
  ***************************************************************************************/
