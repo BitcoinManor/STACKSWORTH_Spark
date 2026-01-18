@@ -30,6 +30,25 @@ This firmware is:
 
 ---
 
+SATONAK API'S
+  - - - [`Satonak Price`](https://www.satonak.bitcoinmanor.com/api/price)
+  - - - [`Satonak Block Height`](https://www.satonak.bitcoinmanor.com/api/height)
+  - - - [`Satonak CAD Price`](https://satonak.bitcoinmanor.com/api/price?fiat=CAD)
+  - - - [`Satonak Fee`](https://satonak.bitcoinmanor.com/api/fee)
+  - - - [`Satonak Hashrate`](https://satonak.bitcoinmanor.com/api/hashrate)
+  - - - [`Satonak Circulating Supply`](https://satonak.bitcoinmanor.com/api/circsupply)
+  - - - [`Satonak Miner`](https://satonak.bitcoinmanor.com/api/miner)
+  - - - [`Satonak 24hr Price Chamge`](https://satonak.bitcoinmanor.com/api/change24h)
+  - - - [`Satonak EUR Price`](https://satonak.bitcoinmanor.com/api/price?fiat=EUR)
+        OTHER BACKUP API's  
+- - [`CoinGecko`](https://www.coingecko.com/en/api)
+  - [`Blockchain.info`](https://blockchain.info)
+  - [`Mempool.space`](https://mempool.space)
+  - [`Blockstream.info`](https://blockstream.info)
+  - [`OpenWeatherMap`](https://openweathermap.org)
+ 
+--- 
+
 ## 🔧 Hardware Specs
 
 | Component        | Description                                      |
