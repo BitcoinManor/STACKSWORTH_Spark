@@ -5,7 +5,7 @@ Welcome to the official firmware repository for **STACKSWORTH Spark** — a beau
 
 Crafted by [Bitcoin Manor](https://BitcoinManor.com), this project combines performance, usability, and sleek UI design to deliver a plug-and-play Bitcoin experience for every home or workspace.
 BUY yours at .[STACKSWORTH](https://Stacksworth.com)
-
+or [Bitcoin Manor BuyNow](https://bitcoinmanor.com/product/stacksworth-matrix-bitcoin-led-display/)
 
 ---
 
