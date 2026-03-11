@@ -13,6 +13,8 @@ or [Bitcoin Manor BuyNow](https://bitcoinmanor.com/product/stacksworth-matrix-bi
 
 **STACKSWORTH Spark** is a 7-inch smart display that showcases real-time Bitcoin data through a vibrant touchscreen interface. It’s minimal and elegant—no deep menus, just smooth screen transitions and rich data visualization.
 
+Project scheduled for Demo prototypes June 1/2026
+
 This firmware is:
 - 🛠️ Built with **Arduino + LVGL**
 - 📦 Uses **microSD-stored UI assets**
