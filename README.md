@@ -18,6 +18,22 @@ or [Bitcoin Manor BuyNow](https://bitcoinmanor.com/product/stacksworth-matrix-bi
 
 ---
 
+## STACKSWORTH LINEUP
+
+Bitcoin Metrics Displays
+-Mini 1.8"
+-Core 2.8"
+-Matrix 16x64 LED Matrix Modules
+-Spark 7" Touch Screen
+
+Bitcoin Node and Metrics Display/ Bitaxe Hub
+-Pulse 5" Touch with Rapberry Pi/ 2TB SSD
+-Edge 7" Touch with Raspberry Pi/ 2TB SSD
+-Infinity 10" Touch/Speakers with Raspberry Pi/ 2TB SSD
+
+---
+
+
 ## 🧠 Project Overview
 
 **STACKSWORTH Spark** is a 7-inch smart display that showcases real-time Bitcoin data through a vibrant touchscreen interface. It’s minimal and elegant—no deep menus, just smooth screen transitions and rich data visualization.
