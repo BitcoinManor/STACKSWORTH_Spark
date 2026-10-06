@@ -2,11 +2,11 @@
  *  STACKSWORTH Spark – "mainScreen" UI
  *  --------------------------------------------------
  *  Project     : STACKSWORTH Spark Firmware
- *  Version     : v1.0.0
+ *  Version     : v1.1.1
  *  Device      : ESP32-S3 Waveshare 7" Touchscreen (800x480)
  *  Description : Modular Bitcoin Dashboard UI using LVGL
  *  Designer    : Bitcoin Manor 🟧
- *  Bitcoinmanor.com STACKSWORTH.COM 
+ * 
  *  
  *  💡 Easter Egg: Try tapping the infinity label in v0.1 😉
  ***************************************************************************************/
@@ -1299,17 +1299,25 @@ lv_obj_t* create_portal_screen(const String& apName) {
 
 
 void showportal_screen(const String& apName) {
-  if (!lv_ready) return;
+  Serial.println("🔧 DEBUG: Entering showportal_screen");
+  if (!lv_ready) {
+    Serial.println("🔧 DEBUG: LVGL not ready, returning");
+    return;
+  }
 
   // If screen already created, just reload it
   if (portalScreen) {
+    Serial.println("🔧 DEBUG: Reloading existing portal screen");
     lv_scr_load(portalScreen);
     return;
   }
 
   // Create and load the portal screen
+  Serial.println("🔧 DEBUG: Creating portal screen");
   portalScreen = create_portal_screen(apName);
+  Serial.println("🔧 DEBUG: Loading portal screen");
   lv_scr_load(portalScreen);
+  Serial.println("🔧 DEBUG: Portal screen loaded successfully");
 }
 
 // ===== SatoNak API Functions =====
@@ -2187,25 +2195,33 @@ ui_weather_set_time(String());
   //  Initialize display + LVGL
   // 1. Boot LVGL + LCD
   lcd_init();
+  Serial.println("🔧 DEBUG: lcd_init() completed");
   
   // Enable swipe gestures after display initialization (moved to end of setup)
   delay(500);  // Let display settle
+  Serial.println("🔧 DEBUG: Starting wipe screen creation");
 
   // ---- FIRST FRAME BUG FIX FOR ST7262 ----
   // Force full-screen black to wipe corrupt right-edge/bottom rows
   lv_obj_t* wipe = lv_obj_create(NULL);
+  Serial.println("🔧 DEBUG: Wipe screen created");
   lv_obj_set_size(wipe, LV_PCT(100), LV_PCT(100));
   lv_obj_set_style_bg_color(wipe, lv_color_black(), LV_PART_MAIN);
   lv_obj_set_style_bg_opa(wipe, LV_OPA_COVER, LV_PART_MAIN);
+  Serial.println("🔧 DEBUG: Wipe screen styled, loading...");
   lv_scr_load(wipe);
+  Serial.println("🔧 DEBUG: Wipe screen loaded");
   lv_timer_handler();  // force immediate draw
   delay(60);           // allow panel to fully latch the frame
+  Serial.println("🔧 DEBUG: Wipe complete");
   // ----------------------------------------
 
   lv_ready = true;
 
   // 2. Initialize UI theme system
+  Serial.println("🔧 DEBUG: Initializing UI theme");
   ui::init_ui_theme();
+  Serial.println("🔧 DEBUG: UI theme initialized");
 
   
 
